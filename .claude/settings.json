@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "additionalDirectories": [
+      "../pgxntool/",
+      "../pgxntool-test-template/"
+    ]
+  }
+}
