@@ -6,6 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **IMPORTANT**: When creating commit messages, do not attribute commits to yourself (Claude). Commit messages should reflect the work being done without AI attribution in the message body. The standard Co-Authored-By trailer is acceptable.
 
+## Expected Output Files
+
+**CRITICAL**: NEVER modify files in `expected/` or run `make sync-expected` yourself. These files define what the tests expect to see, and changing them requires human review and approval.
+
+When tests fail and you believe the new output in `results/` is correct:
+1. Explain what changed and why the new output is correct
+2. Tell the user to run `make sync-expected` themselves
+3. Wait for explicit approval before proceeding
+
 ## What This Repo Is
 
 **pgxntool-test** is the test harness for validating **../pgxntool/** (a PostgreSQL extension build framework).

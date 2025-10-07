@@ -10,12 +10,12 @@ Copying pgxntool/META.in.json to META.in.json and adding to git
 Creating Makefile
 make[1]: `META.json' is up to date.
 Copying ../pgxntool/test/deps.sql to deps.sql and adding to git
-On branch master
-Your branch is ahead of 'origin/master' by 2 commits.
+On branch @BRANCH@
+Your branch is ahead of 'origin/@BRANCH@' by 3 commits.
   (use "git push" to publish your local commits)
-Changes to be committed:
-  (use "git reset HEAD <file>..." to unstage)
 
+Changes to be committed:
+  (use "git restore --staged <file>..." to unstage)
 	new file:   ../.gitignore
 	new file:   ../META.in.json
 	new file:   ../META.json
@@ -33,9 +33,10 @@ git commit -am 'Add pgxntool (https://github.com/decibel/pgxntool/tree/release)'
 ######################################
 # Status
 ######################################
+CLAUDE.md
+Makefile
 META.in.json
 META.json
-Makefile
 meta.mk
 pgxntool
 pgxntool-test.control
@@ -43,12 +44,12 @@ sql
 src
 t
 test
-On branch master
-Your branch is ahead of 'origin/master' by 2 commits.
+On branch @BRANCH@
+Your branch is ahead of 'origin/@BRANCH@' by 3 commits.
   (use "git push" to publish your local commits)
-Changes to be committed:
-  (use "git reset HEAD <file>..." to unstage)
 
+Changes to be committed:
+  (use "git restore --staged <file>..." to unstage)
 	new file:   .gitignore
 	new file:   META.in.json
 	new file:   META.json
@@ -58,7 +59,7 @@ Changes to be committed:
 
 # git commit
 @GIT COMMIT@ Test setup
- 6 files changed, 259 insertions(+)
+ 6 files changed, 262 insertions(+)
  create mode 100644 .gitignore
  create mode 100644 META.in.json
  create mode 100644 META.json

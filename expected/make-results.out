@@ -1,23 +1,18 @@
 # Mess with output to test make results
 # Test make results
-rm -rf  sql/pgxntool-test--0.1.0.sql
-rm -rf results/ regression.diffs regression.out tmp_check/ log/
-cp sql/pgxntool-test.sql sql/pgxntool-test--0.1.0.sql
 @INSTALL@ -c -d '@PG_LOCATION@/share/extension'
 @INSTALL@ -c -d '@PG_LOCATION@/share/doc/extension'
 @INSTALL@ -c -m 644 ./sql/pgxntool-test--0.1.0.sql ./sql/pgxntool-test--0.1.0--0.1.1.sql ./pgxntool-test.control  '@PG_LOCATION@/share/extension/'
 @INSTALL@ -c -m 644 ./doc/adoc_doc.adoc ./doc/adoc_doc.html ./doc/asc_doc.asc ./doc/asciidoc_doc.asciidoc ./doc/asciidoc_doc.html ./doc/other.html ./doc/adoc_doc.html ./doc/asciidoc_doc.html '@PG_LOCATION@/share/doc/extension/'
 INVOCATION OF pg_regress
-(using postmaster on Unix socket, default port)
+(using postmaster on XXXX)
 ============== dropping database "contrib_regression" ==============
 DROP DATABASE
 ============== creating database "contrib_regression" ==============
 CREATE DATABASE
 ALTER DATABASE
-============== installing plpgsql                     ==============
-CREATE LANGUAGE
 ============== running regression test queries        ==============
-test pgxntool-test            ... FAILED
+test pgxntool-test                ... FAILED
 
 ======================
  1 of 1 tests failed. 
@@ -28,39 +23,30 @@ file "@TEST_DIR@/repo/test/regression.diffs".  A copy of the test summary that y
 above is saved in the file "@TEST_DIR@/repo/test/regression.out".
 
 make[1]: [installcheck] Error 1 (ignored)
-*** @TEST_DIR@/repo/test/expected/pgxntool-test.out
---- @TEST_DIR@/repo/test/results/pgxntool-test.out
-***************
-*** 57,60 ****
-  \echo # TRANSACTION INTENTIONALLY LEFT OPEN!
-  # TRANSACTION INTENTIONALLY LEFT OPEN!
-  -- vi: expandtab ts=2 sw=2
-- 
---- 57,59 ----
-
-======================================================================
-
+diff output normalized
+--- @TEST_DIR@/repo/test/expected/pgxntool-test.out
+++++ @TEST_DIR@/repo/test/results/pgxntool-test.out
+@@ -57,4 +57,3 @@
+ \echo # TRANSACTION INTENTIONALLY LEFT OPEN!
+ # TRANSACTION INTENTIONALLY LEFT OPEN!
+ -- vi: expandtab ts=2 sw=2
+-
 ######################################
 # ^^^ Should have a diff ^^^
 ######################################
-rm -rf  sql/pgxntool-test--0.1.0.sql
-rm -rf results/ regression.diffs regression.out tmp_check/ log/
-cp sql/pgxntool-test.sql sql/pgxntool-test--0.1.0.sql
 @INSTALL@ -c -d '@PG_LOCATION@/share/extension'
 @INSTALL@ -c -d '@PG_LOCATION@/share/doc/extension'
 @INSTALL@ -c -m 644 ./sql/pgxntool-test--0.1.0.sql ./sql/pgxntool-test--0.1.0--0.1.1.sql ./pgxntool-test.control  '@PG_LOCATION@/share/extension/'
 @INSTALL@ -c -m 644 ./doc/adoc_doc.adoc ./doc/adoc_doc.html ./doc/asc_doc.asc ./doc/asciidoc_doc.asciidoc ./doc/asciidoc_doc.html ./doc/other.html ./doc/adoc_doc.html ./doc/asciidoc_doc.html '@PG_LOCATION@/share/doc/extension/'
 INVOCATION OF pg_regress
-(using postmaster on Unix socket, default port)
+(using postmaster on XXXX)
 ============== dropping database "contrib_regression" ==============
 DROP DATABASE
 ============== creating database "contrib_regression" ==============
 CREATE DATABASE
 ALTER DATABASE
-============== installing plpgsql                     ==============
-CREATE LANGUAGE
 ============== running regression test queries        ==============
-test pgxntool-test            ... FAILED
+test pgxntool-test                ... FAILED
 
 ======================
  1 of 1 tests failed. 
@@ -71,43 +57,34 @@ file "@TEST_DIR@/repo/test/regression.diffs".  A copy of the test summary that y
 above is saved in the file "@TEST_DIR@/repo/test/regression.out".
 
 make[1]: [installcheck] Error 1 (ignored)
-*** @TEST_DIR@/repo/test/expected/pgxntool-test.out
---- @TEST_DIR@/repo/test/results/pgxntool-test.out
-***************
-*** 57,60 ****
-  \echo # TRANSACTION INTENTIONALLY LEFT OPEN!
-  # TRANSACTION INTENTIONALLY LEFT OPEN!
-  -- vi: expandtab ts=2 sw=2
-- 
---- 57,59 ----
-
-======================================================================
-
+diff output normalized
+--- @TEST_DIR@/repo/test/expected/pgxntool-test.out
+++++ @TEST_DIR@/repo/test/results/pgxntool-test.out
+@@ -57,4 +57,3 @@
+ \echo # TRANSACTION INTENTIONALLY LEFT OPEN!
+ # TRANSACTION INTENTIONALLY LEFT OPEN!
+ -- vi: expandtab ts=2 sw=2
+-
 rsync -rlpgovP test/results/ test/expected
-sending incremental file list
+RSYNC TRANSFER
 pgxntool-test.out
 RSYNC OUTPUT
 
-sent 1,851 bytes  received 35 bytes  3,772.00 bytes/sec
-total size is 1,728  speedup is 0.92
-rm -rf  sql/pgxntool-test--0.1.0.sql
-rm -rf results/ regression.diffs regression.out tmp_check/ log/
-cp sql/pgxntool-test.sql sql/pgxntool-test--0.1.0.sql
+RSYNC STATS
+RSYNC STATS
 @INSTALL@ -c -d '@PG_LOCATION@/share/extension'
 @INSTALL@ -c -d '@PG_LOCATION@/share/doc/extension'
 @INSTALL@ -c -m 644 ./sql/pgxntool-test--0.1.0.sql ./sql/pgxntool-test--0.1.0--0.1.1.sql ./pgxntool-test.control  '@PG_LOCATION@/share/extension/'
 @INSTALL@ -c -m 644 ./doc/adoc_doc.adoc ./doc/adoc_doc.html ./doc/asc_doc.asc ./doc/asciidoc_doc.asciidoc ./doc/asciidoc_doc.html ./doc/other.html ./doc/adoc_doc.html ./doc/asciidoc_doc.html '@PG_LOCATION@/share/doc/extension/'
 INVOCATION OF pg_regress
-(using postmaster on Unix socket, default port)
+(using postmaster on XXXX)
 ============== dropping database "contrib_regression" ==============
 DROP DATABASE
 ============== creating database "contrib_regression" ==============
 CREATE DATABASE
 ALTER DATABASE
-============== installing plpgsql                     ==============
-CREATE LANGUAGE
 ============== running regression test queries        ==============
-test pgxntool-test            ... ok
+test pgxntool-test                ... ok
 
 =====================
  All 1 tests passed. 

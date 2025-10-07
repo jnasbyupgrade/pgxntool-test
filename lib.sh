@@ -46,9 +46,11 @@ out () {
 
 clean_log () {
   # Need to strip out temporary path and git hashes out of the log file. The
-  # (/private) bit is to filter out some crap OS X adds.
+  # (/private)? bit is to filter out some crap OS X adds.
+  # Normalize TEST_DIR to handle double slashes (e.g., /tmp//foo -> /tmp/foo)
+  local NORM_TEST_DIR=$(echo "$TEST_DIR" | sed -E 's#([^:])//+#\1/#g')
   sed -i .bak -E \
-    -e "s#(/private)\\\\?$TEST_DIR#@TEST_DIR@#g" \
+    -e "s#(/private)?$NORM_TEST_DIR#@TEST_DIR@#g" \
     -e "s#^git fetch $PGXNREPO $PGXNBRANCH#git fetch @PGXNREPO@ @PGXNBRANCH@#" \
     -e "s#$PG_LOCATION#@PG_LOCATION@#g" \
     -f $RESULT_DIR/result.sed \
