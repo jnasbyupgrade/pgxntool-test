@@ -32,10 +32,6 @@ test-make-results: test-make-test
 .PHONY: test
 test: clean-temp cont
 
-# Run both legacy and BATS tests
-.PHONY: test-all
-test-all: clean-temp cont test-bats
-
 # Just continue what we were building
 .PHONY: cont
 cont: $(TEST_TARGETS)
@@ -43,13 +39,49 @@ cont: $(TEST_TARGETS)
 		&& (echo; echo 'All tests passed!'; echo) \
 		|| (echo; echo "Some tests failed:"; echo ; egrep -lR '.' $(DIFF_DIR); echo; exit 1)
 
-# BATS tests (run after legacy tests, before cleanup)
+# BATS tests - New architecture with sequential and independent tests
+# Run validation first, then run all tests
 .PHONY: test-bats
-test-bats: test-dist
+test-bats: clean-envs
 	@echo
-	@echo "Running BATS tests..."
-	@test/bats/bin/bats tests-bats/*.bats
+	@echo "Running BATS meta-validation..."
+	@test/bats/bin/bats tests-bats/00-validate-tests.bats
 	@echo
+	@echo "Running BATS foundation tests..."
+	@test/bats/bin/bats tests-bats/01-clone.bats
+	@test/bats/bin/bats tests-bats/02-setup.bats
+	@test/bats/bin/bats tests-bats/03-meta.bats
+	@test/bats/bin/bats tests-bats/04-dist.bats
+	@test/bats/bin/bats tests-bats/05-setup-final.bats
+	@echo
+	@echo "Running BATS independent tests..."
+	@test/bats/bin/bats tests-bats/test-make-test.bats
+	@test/bats/bin/bats tests-bats/test-make-results.bats
+	@test/bats/bin/bats tests-bats/test-doc.bats
+	@echo
+
+# Run individual BATS test files
+.PHONY: test-bats-validate test-bats-clone test-bats-setup test-bats-meta test-bats-dist test-bats-setup-final
+test-bats-validate:
+	@test/bats/bin/bats tests-bats/00-validate-tests.bats
+test-bats-clone:
+	@test/bats/bin/bats tests-bats/01-clone.bats
+test-bats-setup:
+	@test/bats/bin/bats tests-bats/02-setup.bats
+test-bats-meta:
+	@test/bats/bin/bats tests-bats/03-meta.bats
+test-bats-dist:
+	@test/bats/bin/bats tests-bats/04-dist.bats
+test-bats-setup-final:
+	@test/bats/bin/bats tests-bats/05-setup-final.bats
+
+.PHONY: test-bats-make-test test-bats-make-results test-bats-doc
+test-bats-make-test:
+	@test/bats/bin/bats tests-bats/test-make-test.bats
+test-bats-make-results:
+	@test/bats/bin/bats tests-bats/test-make-results.bats
+test-bats-doc:
+	@test/bats/bin/bats tests-bats/test-doc.bats
 
 # Alias for legacy tests
 .PHONY: test-legacy
@@ -116,9 +148,20 @@ clean: clean-temp
 clean-temp:
 	@[ ! -e .env ] || (echo Removing temporary environment; ./clean-temp.sh)
 
-clean: clean-temp 
+# Clean BATS test environments
+.PHONY: clean-envs
+clean-envs:
+	@echo "Removing BATS test environments..."
+	@rm -rf .envs
+
+clean: clean-temp clean-envs
 	rm -rf $(CLEAN)
 
 # To use this, do make print-VARIABLE_NAME
 print-%	: ; $(info $* is $(flavor $*) variable set to "$($*)") @true
+
+# List all make targets
+.PHONY: list
+list:
+	sh -c "$(MAKE) -p no_targets__ | awk -F':' '/^[a-zA-Z0-9][^\$$#\/\\t=]*:([^=]|$$)/ {split(\$$1,A,/ /);for(i in A)print A[i]}' | grep -v '__\$$' | sort"
 

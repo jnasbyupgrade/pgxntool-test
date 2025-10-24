@@ -1,0 +1,822 @@
+# CLAUDE.md - BATS Test System Guide for AI Assistants
+
+This file provides guidance for AI assistants (like Claude Code) when working with the BATS test system in this directory.
+
+## Critical Architecture Understanding
+
+### The Sequential State Building Pattern
+
+The most important concept to understand is how sequential tests build state:
+
+```
+00-validate-tests → sequential env, no repo work
+01-clone         → sequential env, creates TEST_REPO
+02-setup         → sequential env, runs setup.sh in TEST_REPO
+03-meta          → sequential env, validates META.json generation
+04-dist          → sequential env, creates distribution zip
+05-setup-final   → sequential env, final validation
+```
+
+Each test **assumes** the previous test's work is complete. Test 03 expects TEST_REPO to exist with a configured Makefile. If the environment is clean, those assumptions break.
+
+### The Pollution Detection Contract
+
+**Key insight**: Sequential tests share state, so we must detect when that state is invalid.
+
+State becomes invalid when:
+1. **Incomplete execution**: Test started but crashed (`.start-*` exists but no `.complete-*`)
+2. **Out-of-order execution**: Running tests 01-03 after a previous run that completed 01-05 leaves state from tests 04-05
+
+When pollution is detected, `setup_sequential_test()` rebuilds the world:
+1. Clean environment completely
+2. Re-run all prerequisite tests
+3. Start fresh
+
+**Why this matters to you**: If you break pollution detection, tests will fail mysteriously because they're using stale/wrong state.
+
+### The Special Case of 00-validate-tests.bats
+
+This test validates that all other tests follow required structure. It's a meta-test.
+
+**Critical rule**: It MUST follow sequential test rules even though it doesn't use the test environment.
+
+**Why**: Its filename matches `[0-9][0-9]-*.bats`, so:
+- `detect_dirty_state()` includes it in test ordering logic
+- If it doesn't have state markers, pollution detection breaks
+- Other tests may try to check if it completed
+
+**The pattern**: ANY test matching `[0-9][0-9]-*.bats` must follow sequential rules, period. Filename determines behavior.
+
+### BATS vs Legacy Test Infrastructure
+
+**CRITICAL**: BATS tests DO NOT use lib.sh from the legacy test system.
+
+The legacy test system (tests/* scripts) uses lib.sh which provides:
+- Output functions that use file descriptors 8 & 9
+- Redirection functions for capturing test output
+- These are designed for capturing entire test output to log files
+
+**BATS tests have their own infrastructure** in tests-bats/helpers.bash:
+- Output functions that use file descriptor 3 (BATS requirement)
+- Variable setup functions (setup_pgxntool_vars) extracted from lib.sh
+- No file descriptor redirection (BATS handles this internally)
+
+**Why the separation?**
+- lib.sh's output functions use FD 8/9 which don't exist in BATS context
+- BATS has its own output capturing mechanism (uses FD 1/2/3)
+- Mixing the two systems causes "Bad file descriptor" errors
+
+**What BATS tests DO use:**
+- TOPDIR, TEST_DIR, TEST_REPO, RESULT_DIR (from .env file)
+- PGXNREPO, PGXNBRANCH, TEST_TEMPLATE, PG_LOCATION (from setup_pgxntool_vars)
+- Helper functions in helpers.bash (out, error, debug, assertion functions)
+
+**What BATS tests DO NOT use:**
+- lib.sh's redirect() / reset_redirect() functions
+- lib.sh's out() / error() functions (incompatible FD usage)
+- Legacy test output capturing mechanism
+
+### BATS Output Handling: File Descriptors
+
+**CRITICAL**: BATS has special requirements for output that you MUST follow or tests will fail silently or hang.
+
+BATS maintains strict separation between test output and the TAP (Test Anything Protocol) stream:
+
+**File Descriptor 1 (stdout) & File Descriptor 2 (stderr)**:
+- Output to these is **captured** and only shown when tests **fail**
+- Used for diagnostic information that shouldn't clutter successful runs
+- Example: command output, error messages from failures
+
+**File Descriptor 3 (&3)**:
+- Output to FD 3 goes **directly to the terminal**, shown unconditionally
+- Used for debug messages, progress indicators, status updates
+- **This is what our `debug()` function uses**: `echo "DEBUG[$level]: $message" >&3`
+
+**Critical Rules**:
+
+1. **Never use `>&2` for debug output in BATS** - it gets captured and won't show up
+2. **Always use `>&3` for debug/status messages** you want to see while tests run
+3. **Close FD 3 for long-running child processes**: `command 3>&-` to prevent BATS from hanging
+4. **Prefix FD 3 output with `#`** for TAP compliance: `echo '# message' >&3`
+
+**Example**:
+```bash
+# WRONG - won't show up during test run
+debug() {
+  echo "DEBUG: $*" >&2  # Captured, only shown on failure
+}
+
+# CORRECT - shows immediately
+debug() {
+  echo "DEBUG: $*" >&3  # Goes directly to terminal
+}
+```
+
+**Reference**: https://bats-core.readthedocs.io/en/stable/writing-tests.html#printing-to-the-terminal
+
+### Output Helper Functions
+
+We provide three helper functions for all output in BATS tests. **Always use these instead of raw echo commands:**
+
+#### `out "message"`
+**Purpose**: Output informational messages that should always be visible
+
+**Usage**:
+```bash
+out "Creating test environment..."
+out "Running prerequisites..."
+out "Test completed successfully"
+```
+
+**Implementation**: Automatically prefixes with `#` and sends to FD 3
+
+#### `error "message"`
+**Purpose**: Output error message and return failure (return 1)
+
+**Usage**:
+```bash
+if [ ! -f "$required_file" ]; then
+  error "Required file not found: $required_file"
+fi
+
+# Equivalent to:
+# out "ERROR: Required file not found: $required_file"
+# return 1
+```
+
+**When to use**: Any error condition that should fail the test/function
+
+#### `debug LEVEL "message"`
+**Purpose**: Conditional debug output based on DEBUG environment variable
+
+**Usage**:
+```bash
+debug 1 "POLLUTION DETECTED: test incomplete"  # Most important
+debug 2 "Checking prerequisites..."             # Workflow
+debug 3 "Found marker file: .start-test"        # Detail
+debug 5 "Full state: $state_contents"           # Verbose
+```
+
+**Debug Levels**:
+- **1**: Critical errors, pollution detection (always want to see when debugging)
+- **2**: Test flow, major operations (setup, prerequisites)
+- **3**: Detailed state checking, file operations
+- **4**: Reserved for future use
+- **5**: Maximum verbosity, full traces
+
+**Enable with**: `DEBUG=2 test/bats/bin/bats tests-bats/01-clone.bats`
+
+**Critical Rules**:
+1. **Never use `echo` directly** - always use `out()`, `error()`, or `debug()`
+   - `echo` to stdout/stderr gets captured by BATS and only shows on failure
+   - Direct `echo` without `#` prefix breaks TAP output format
+   - Violations make debugging much harder
+   - **ALWAYS** use the output helper functions
+2. **Never output to >&2** - it gets captured by BATS and won't show
+3. **All output must go through these helpers** to ensure visibility
+
+**Bad Example:**
+```bash
+echo "Starting test..."  # Won't appear when you need it!
+cd "$TEST_REPO" || echo "cd failed"  # Error hidden until test fails
+```
+
+**Good Example:**
+```bash
+out "Starting test..."  # Always visible
+cd "$TEST_REPO" || error "Failed to cd to TEST_REPO"  # Error visible immediately
+```
+
+## Shell Error Handling Rules
+
+### Never Use `|| true` Without Clear Documentation
+
+**CRITICAL RULE:** Never use `|| true` to suppress errors without a clear, documented reason in a comment.
+
+**Why This Matters:**
+- `|| true` silently masks failures, making debugging nearly impossible
+- Real bugs get hidden behind "it's supposed to fail sometimes"
+- Future maintainers won't know if the suppression is intentional or a bug
+
+**Bad Examples:**
+```bash
+cd "$TEST_REPO" 2>/dev/null || true  # Why is this OK to fail?
+
+git status || true  # Is this hiding a real problem?
+
+rm -f somefile || true  # rm -f already doesn't fail on missing files!
+```
+
+**Good Examples (if suppression is truly needed):**
+```bash
+# OK to fail: TEST_REPO may not exist in early setup tests before test 2
+cd "$TEST_REPO" 2>/dev/null || true
+
+# OK to fail: This test intentionally checks error handling
+run some_command_that_should_fail || true
+```
+
+**Better Alternatives:**
+```bash
+# Instead of suppressing, let it fail if it should fail:
+cd "$TEST_REPO"  # Should exist at this point; fail if it doesn't
+
+# Use BATS skip if operation is conditional:
+if [ ! -d "$TEST_REPO" ]; then
+  skip "TEST_REPO not created yet"
+fi
+cd "$TEST_REPO"
+
+# For truly optional operations, be explicit:
+if [ -f "optional_file" ]; then
+  process_optional_file
+fi
+# Don't use: process_optional_file 2>/dev/null || true
+```
+
+**Review Checklist for `|| true`:**
+1. Is there a comment explaining why failure is acceptable?
+2. Could this hide a real bug?
+3. Would using `skip` be clearer?
+4. Is the operation truly optional, or should it be required?
+
+## Common Mistakes When Modifying Tests
+
+### Mistake 1: Not Following Sequential Rules
+
+**Bad**:
+```bash
+# File: 06-new-feature.bats
+load helpers
+
+@test "test something" {
+  # Missing setup_file, setup, teardown_file
+  assert_file_exists "$TEST_REPO/something"
+}
+```
+
+**Why bad**: Filename `06-*.bats` matches sequential pattern, but doesn't:
+- Call `setup_sequential_test()` in `setup_file()`
+- Call `load_test_env()` in `setup()`
+- Call `mark_test_complete()` in `teardown_file()`
+
+Result: Breaks pollution detection, other tests fail mysteriously.
+
+**Good**:
+```bash
+# File: 06-new-feature.bats
+load helpers
+
+setup_file() {
+  setup_sequential_test "06-new-feature" "05-setup-final"
+}
+
+setup() {
+  load_test_env "sequential"
+}
+
+teardown_file() {
+  mark_test_complete "06-new-feature"
+}
+
+@test "test something" {
+  assert_file_exists "$TEST_REPO/something"
+}
+```
+
+### Mistake 2: Wrong Environment Name
+
+**Bad**:
+```bash
+setup_file() {
+  setup_sequential_test "02-setup" "01-clone"
+}
+
+setup() {
+  load_test_env "setup"  # Wrong! Creates separate environment
+}
+```
+
+**Why bad**: Sequential tests MUST use `"sequential"` environment. Using different name creates separate environment, breaks shared state.
+
+**Good**:
+```bash
+setup() {
+  load_test_env "sequential"  # Correct
+}
+```
+
+### Mistake 3: Forgetting to Mark Complete
+
+**Bad**:
+```bash
+setup_file() {
+  setup_sequential_test "03-meta" "02-setup"
+}
+
+setup() {
+  load_test_env "sequential"
+}
+
+# Missing teardown_file
+```
+
+**Why bad**: No `mark_test_complete()` call means:
+- Next test sees incomplete state
+- Triggers pollution detection
+- Causes full environment rebuild
+
+**Good**:
+```bash
+teardown_file() {
+  mark_test_complete "03-meta"  # Always add this
+}
+```
+
+### Mistake 4: Wrong Prerequisites
+
+**Bad**:
+```bash
+setup_file() {
+  # Test 04 depends on 03, but doesn't list it
+  setup_sequential_test "04-dist" "01-clone"
+}
+```
+
+**Why bad**: If environment is polluted and rebuilt, prerequisites are re-run. But this only re-runs 01-clone, not 02-setup or 03-meta. Test fails because META.json doesn't exist.
+
+**Good**:
+```bash
+setup_file() {
+  # List immediate prerequisite (system will check it recursively)
+  setup_sequential_test "04-dist" "03-meta"
+}
+```
+
+Or if you want to be explicit about the full chain:
+```bash
+setup_file() {
+  setup_sequential_test "04-dist" "01-clone" "02-setup" "03-meta"
+}
+```
+
+### Mistake 5: Modifying helpers.bash Without Understanding Impact
+
+**Example**: Changing `detect_dirty_state()` logic.
+
+**Why dangerous**: This function is called by every sequential test. A bug breaks the entire test suite in subtle ways.
+
+**Before modifying**:
+1. Read the function completely
+2. Understand what "pollution" means
+3. Test with multiple scenarios:
+   - Clean run of full suite
+   - Run tests 01-03, then re-run 01-03
+   - Run tests 01-05, then run only 01-03
+   - Run test that crashes mid-execution
+4. Verify pollution is detected correctly in all cases
+
+## Safe Modification Patterns
+
+### Adding a New Sequential Test
+
+**Steps**:
+1. **Choose number**: Next in sequence (e.g., if 05 exists, use 06)
+2. **Create file**: `0X-descriptive-name.bats`
+3. **Copy template** from existing test (e.g., 03-meta.bats)
+4. **Update setup_file**:
+   - Change test name
+   - List immediate prerequisite
+5. **Write tests**: Use semantic assertions
+6. **Test individually**: `test/bats/bin/bats tests-bats/0X-name.bats`
+7. **Test in sequence**: Run full suite
+
+**Template**:
+```bash
+#!/usr/bin/env bats
+
+load helpers
+
+setup_file() {
+  setup_sequential_test "0X-name" "0Y-previous"
+}
+
+setup() {
+  load_test_env "sequential"
+}
+
+teardown_file() {
+  mark_test_complete "0X-name"
+}
+
+@test "descriptive test name" {
+  # Your test code
+  assert_something
+}
+```
+
+### Adding a New Independent Test
+
+**Steps**:
+1. **Choose name**: `test-feature-name.bats` (NOT numbered)
+2. **Choose environment**: Unique name (e.g., `"feature-name"`)
+3. **List prerequisites**: Which sequential tests to run first
+4. **Write tests**: No teardown_file needed
+
+**Template**:
+```bash
+#!/usr/bin/env bats
+
+load helpers
+
+setup_file() {
+  # Run prerequisites: clone → setup → meta
+  setup_independent_test "test-feature" "feature" "01-clone" "02-setup" "03-meta"
+}
+
+setup() {
+  load_test_env "feature"
+}
+
+# No teardown_file needed for independent tests
+
+@test "test feature" {
+  # Test runs in complete isolation
+  assert_something
+}
+```
+
+### Modifying Existing Tests
+
+**Safe**:
+- Adding new `@test` blocks
+- Changing assertion details
+- Adding comments
+
+**Risky**:
+- Changing test name (passed to `setup_sequential_test`)
+- Changing prerequisites
+- Removing `teardown_file()`
+- Changing environment name
+
+**Before modifying**:
+1. Run test individually to verify it passes
+2. Run full suite to verify prerequisites work
+3. Clean environment and re-run to verify pollution detection works
+
+### Modifying helpers.bash
+
+**Critical functions** (test thoroughly before changing):
+- `detect_dirty_state()` - Pollution detection logic
+- `setup_sequential_test()` - Sequential test initialization
+- `mark_test_start()` - State marker creation
+- `mark_test_complete()` - State marker completion
+
+**Less critical** (safer to modify):
+- `assert_*` functions - Just add tests for new assertions
+- `debug()` - Output function, low risk
+
+**Testing strategy**:
+1. Make change
+2. Run full suite (01-05): Should pass quickly, no rebuilds
+3. Clean and re-run: Should pass, building fresh state
+4. Run 01-03, then re-run 01-03: Should pass, reusing state
+5. Run 01-05, then run only 01-03: Should detect pollution and rebuild
+
+## Debugging Strategies
+
+### Test Fails: "Environment polluted"
+
+**Diagnosis**:
+```bash
+# Check state markers
+ls -la .envs/sequential/.bats-state/
+
+# Look for incomplete tests
+for f in .envs/sequential/.bats-state/.start-*; do
+  test=$(basename "$f" | sed 's/^.start-//')
+  if [ ! -f ".envs/sequential/.bats-state/.complete-$test" ]; then
+    echo "Incomplete: $test"
+  fi
+done
+```
+
+**Common causes**:
+1. Test crashed and left incomplete state
+2. Running tests out of order
+3. Test doesn't call `mark_test_complete()`
+
+**Fix**:
+```bash
+# Clean and try again
+rm -rf .envs/
+test/bats/bin/bats tests-bats/01-clone.bats
+```
+
+### Test Fails: "TEST_REPO not found"
+
+**Diagnosis**: Prerequisites didn't run.
+
+**Causes**:
+1. Test doesn't declare prerequisites in `setup_file()`
+2. Prerequisite test failed
+3. Wrong environment name (created separate environment)
+
+**Fix**:
+1. Check `setup_file()` declares prerequisites
+2. Check environment name is `"sequential"`
+3. Run prerequisites manually to see if they pass
+
+### Test Passes Individually, Fails in Suite
+
+**Diagnosis**: Test depends on previous test but doesn't declare it.
+
+**Example**:
+```bash
+# This passes (auto-runs prerequisites):
+test/bats/bin/bats tests-bats/04-dist.bats
+
+# But when run after 03-meta fails, 04 also fails
+# because it assumed 03 completed
+```
+
+**Fix**: Add missing prerequisite to `setup_sequential_test()`.
+
+### Pollution Detection Too Aggressive
+
+**Symptom**: Every test triggers full rebuild even when state is clean.
+
+**Diagnosis**: Bug in `detect_dirty_state()` logic.
+
+**Common causes**:
+1. Test ordering logic is wrong (check `ls [0-9][0-9]-*.bats | sort`)
+2. Incomplete test detection is wrong (check `.start-*` vs `.complete-*` logic)
+3. Test name doesn't match expected pattern
+
+**Debug**:
+```bash
+# Add debug output
+DEBUG=5 test/bats/bin/bats tests-bats/02-setup.bats
+
+# Check what detect_dirty_state sees
+cd .envs/sequential/.bats-state
+ls -la
+```
+
+## Key Invariants to Maintain
+
+When modifying the test system, these must remain true:
+
+### Invariant 1: Sequential Test Contract
+```
+IF filename matches [0-9][0-9]-*.bats
+THEN test MUST:
+  - Call setup_sequential_test() in setup_file()
+  - Call load_test_env("sequential") in setup()
+  - Call mark_test_complete() in teardown_file()
+```
+
+### Invariant 2: Pollution Detection Correctness
+```
+detect_dirty_state(test) returns 1 (dirty) IFF:
+  - Some test started but didn't complete (crashed)
+  - OR some test that runs AFTER current test has already run
+```
+
+### Invariant 3: State Marker Consistency
+```
+For each sequential test:
+  - .start-X exists → test has started
+  - .complete-X exists → test finished successfully
+  - .pid-X exists → test is currently running
+  - If .start-X but not .complete-X → test is incomplete (crashed or running)
+```
+
+### Invariant 4: Environment Isolation
+```
+- Sequential tests MUST use "sequential" environment (shared state)
+- Independent tests MUST use unique environment names (isolated state)
+- Different environments NEVER share state
+```
+
+### Invariant 5: Prerequisite Transitivity
+```
+If test B depends on A, and test C depends on B:
+  - C can declare prerequisite "B" (system checks B's prerequisites)
+  - OR C can declare prerequisites "A", "B" (explicit chain)
+  - Either way, when C runs, A and B are guaranteed complete
+```
+
+## Understanding Test Execution Flow
+
+### Scenario 1: Clean Run (No Existing State)
+
+```
+User: test/bats/bin/bats tests-bats/03-meta.bats
+
+03-meta setup_file():
+  ├─ setup_sequential_test("03-meta", "02-setup")
+  ├─ load_test_env("sequential")
+  │  └─ Environment doesn't exist, creates it
+  ├─ detect_dirty_state("03-meta")
+  │  └─ No state markers, returns 0 (clean)
+  ├─ Check prerequisite "02-setup"
+  │  └─ .complete-02-setup missing
+  ├─ Run prerequisite: bats 02-setup.bats
+  │  ├─ 02-setup setup_file()
+  │  ├─ Check prerequisite "01-clone"
+  │  │  └─ .complete-01-clone missing
+  │  ├─ Run prerequisite: bats 01-clone.bats
+  │  │  ├─ Creates TEST_REPO
+  │  │  ├─ Marks complete
+  │  │  └─ Returns success
+  │  ├─ Runs setup.sh
+  │  ├─ Marks complete
+  │  └─ Returns success
+  └─ mark_test_start("03-meta")
+
+03-meta runs tests...
+
+03-meta teardown_file():
+  └─ mark_test_complete("03-meta")
+```
+
+### Scenario 2: Reusing Existing State
+
+```
+User: test/bats/bin/bats tests-bats/03-meta.bats
+(State from previous run exists: .complete-01-clone, .complete-02-setup)
+
+03-meta setup_file():
+  ├─ load_test_env("sequential")
+  │  └─ Environment exists, loads it
+  ├─ detect_dirty_state("03-meta")
+  │  └─ No pollution detected, returns 0 (clean)
+  ├─ Check prerequisite "02-setup"
+  │  └─ .complete-02-setup exists, skip
+  └─ mark_test_start("03-meta")
+
+03-meta runs tests...
+```
+
+### Scenario 3: Pollution Detected
+
+```
+User: test/bats/bin/bats tests-bats/02-setup.bats
+(State from previous full run exists: .complete-01-clone through .complete-05-setup-final)
+
+02-setup setup_file():
+  ├─ load_test_env("sequential")
+  ├─ detect_dirty_state("02-setup")
+  │  ├─ Check test order: 01-clone, 02-setup, 03-meta, 04-dist, 05-setup-final
+  │  ├─ Current test: 02-setup
+  │  ├─ Tests after 02-setup: 03-meta, 04-dist, 05-setup-final
+  │  ├─ Check: .start-03-meta exists? YES
+  │  └─ POLLUTION DETECTED, return 1
+  ├─ Environment polluted!
+  ├─ clean_env("sequential")
+  ├─ load_test_env("sequential")  # Recreates
+  ├─ Run prerequisite: bats 01-clone.bats
+  │  └─ Rebuilds from scratch
+  └─ mark_test_start("02-setup")
+
+02-setup runs tests with clean state...
+```
+
+## When to Use Sequential vs Independent
+
+### Use Sequential Test When:
+- Testing core pgxntool workflow steps
+- Building on previous test's work
+- State is expensive to create
+- Tests naturally run in order
+
+**Example**: Testing `make dist` (requires clone → setup → meta to work)
+
+### Use Independent Test When:
+- Testing a specific feature in isolation
+- Feature can be tested from any starting point
+- Want to avoid affecting sequential state
+- Plan to run tests in parallel (future)
+
+**Example**: Testing documentation generation (needs repo setup, but doesn't affect other tests)
+
+### Signs You Chose Wrong:
+
+**Sequential test that should be independent**:
+- Test doesn't depend on previous test's work
+- Other sequential tests don't depend on it
+- Test is slow and could be parallelized
+
+**Independent test that should be sequential**:
+- Test needs exactly the same prerequisites as existing sequential tests
+- Test is part of the core workflow
+- Creating fresh environment is wasteful
+
+## Testing Your Changes
+
+### Minimum Test Matrix
+
+Before committing changes to test system:
+
+```bash
+# 1. Clean full run
+rm -rf .envs/
+for test in tests-bats/0*.bats; do
+  test/bats/bin/bats "$test" || exit 1
+done
+
+# 2. Rerun (should reuse state)
+for test in tests-bats/0*.bats; do
+  test/bats/bin/bats "$test" || exit 1
+done
+
+# 3. Partial rerun (should detect pollution)
+rm -rf .envs/
+test/bats/bin/bats tests-bats/01-clone.bats
+test/bats/bin/bats tests-bats/02-setup.bats
+test/bats/bin/bats tests-bats/03-meta.bats
+# Now run earlier test (should detect pollution)
+test/bats/bin/bats tests-bats/02-setup.bats
+
+# 4. Individual test (should auto-run prerequisites)
+rm -rf .envs/
+test/bats/bin/bats tests-bats/04-dist.bats
+```
+
+### Debug Checklist
+
+When test fails:
+1. [ ] Check state markers: `ls -la .envs/sequential/.bats-state/`
+2. [ ] Check PID files: Any stale? Any actually running?
+3. [ ] Check test environment: Does TEST_REPO exist? Contains expected files?
+4. [ ] Run with debug: `DEBUG=5 test/bats/bin/bats tests-bats/XX-test.bats`
+5. [ ] Check prerequisites: Do they pass individually?
+6. [ ] Check git status: Is repo dirty? Any uncommitted changes?
+
+## Common Questions
+
+### Q: Why can't I just remove the pollution detection?
+
+**A**: Without it, you get false results. Example:
+- Run full suite (01-05), test 04 fails
+- Fix test 04 code
+- Rerun test 04 → passes!
+- But you're testing against state from old test 03
+- When you run full suite, test 04 might still fail
+
+Pollution detection ensures you're always testing against correct state.
+
+### Q: Why not just clean environment before every test?
+
+**A**: Too slow. Running prerequisites for every test means:
+- Test 02 runs: clone
+- Test 03 runs: clone + setup
+- Test 04 runs: clone + setup + meta
+- Test 05 runs: clone + setup + meta + dist
+
+Full suite would run clone ~15 times. With state sharing:
+- Clone runs once
+- Each test adds incremental work
+
+### Q: Can I add helper functions to helpers.bash?
+
+**A**: Yes, but:
+- Add tests for new assertions
+- Don't break existing functions
+- Use clear names
+- Add comments explaining purpose
+- Test with full suite after adding
+
+### Q: What if I want a test that doesn't fit either pattern?
+
+**A**: Rare, but possible. Options:
+1. Make it a standalone script in `tests/` (legacy system)
+2. Make it independent test with custom setup
+3. Rethink - maybe it's actually a variant of sequential or independent
+
+### Q: Can sequential tests run in parallel?
+
+**A**: No, they share state. Running in parallel would cause:
+- Race conditions on state markers
+- Conflicting changes to TEST_REPO
+- Pollution detection false positives
+
+Only independent tests can run in parallel (future feature).
+
+## Summary: Key Principles
+
+1. **Filename determines behavior**: `[0-9][0-9]-*.bats` = sequential rules apply
+2. **Sequential = shared state**: All use `"sequential"` environment
+3. **Independent = isolated state**: Each uses unique environment name
+4. **Pollution detection protects correctness**: Don't disable it
+5. **State markers are the source of truth**: `.start-*`, `.complete-*`, `.pid-*`
+6. **Prerequisites must be explicit**: Don't rely on implicit ordering
+7. **Always mark complete**: Even if tests fail, `teardown_file()` must run
+8. **Test the tests**: Changes to helpers.bash affect entire suite
+
+When in doubt, read the code in:
+- `helpers.bash:detect_dirty_state()` - Pollution detection logic
+- `helpers.bash:setup_sequential_test()` - Sequential test setup
+- `01-clone.bats` - Simplest sequential test example
+- `test-doc.bats` - Independent test example (when it exists)

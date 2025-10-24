@@ -5,37 +5,36 @@
 # This validates that 'make dist' creates a properly structured distribution
 # archive with correct file inclusion/exclusion rules.
 
+load helpers
+
 setup_file() {
-  # Load test environment - must be run after tests/clone has executed
-  if [ ! -f "$BATS_TEST_DIRNAME/../.env" ]; then
-    echo "ERROR: .env not found. Run legacy tests first to set up test environment." >&2
-    return 1
-  fi
+  debug 1 ">>> ENTER setup_file: 04-dist (PID=$$)"
+  setup_sequential_test "04-dist" "03-meta"
 
-  source "$BATS_TEST_DIRNAME/../.env"
-  source "$TOPDIR/lib.sh"
-
-  # Store these for all tests in this file
-  export TEST_REPO
   export DISTRIBUTION_NAME=distribution_test
   export DIST_FILE="$TEST_REPO/../${DISTRIBUTION_NAME}-0.1.0.zip"
+  debug 1 "<<< EXIT setup_file: 04-dist (PID=$$)"
 }
 
 setup() {
+  load_test_env "sequential"
   cd "$TEST_REPO"
 }
 
+teardown_file() {
+  debug 1 ">>> ENTER teardown_file: 04-dist (PID=$$)"
+  mark_test_complete "04-dist"
+  debug 1 "<<< EXIT teardown_file: 04-dist (PID=$$)"
+}
+
 @test "make dist creates distribution archive" {
-  # Run make dist ourselves to ensure zip exists
+  # Run make dist to create the distribution
   make dist
   [ -f "$DIST_FILE" ]
 }
 
 @test "distribution contains documentation files" {
-  # Ensure dist was created
-  [ -f "$DIST_FILE" ] || make dist
-
-  # Extract list of files from zip
+  # Extract list of files from zip (created by legacy test)
   local files=$(unzip -l "$DIST_FILE" | awk '{print $4}')
 
   # Should contain at least one doc file
@@ -43,7 +42,6 @@ setup() {
 }
 
 @test "distribution excludes pgxntool documentation" {
-  [ -f "$DIST_FILE" ] || make dist
   local files=$(unzip -l "$DIST_FILE" | awk '{print $4}')
 
   # Should NOT contain any pgxntool docs
@@ -53,7 +51,6 @@ setup() {
 }
 
 @test "distribution includes expected extension files" {
-  [ -f "$DIST_FILE" ] || make dist
   local files=$(unzip -l "$DIST_FILE" | awk '{print $4}')
 
   # Check for key files
@@ -62,7 +59,6 @@ setup() {
 }
 
 @test "distribution includes test documentation" {
-  [ -f "$DIST_FILE" ] || make dist
   local files=$(unzip -l "$DIST_FILE" | awk '{print $4}')
 
   # Should have test docs

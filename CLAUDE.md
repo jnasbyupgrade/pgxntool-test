@@ -35,7 +35,22 @@ This repo tests pgxntool by:
 
 ## How Tests Work
 
-### Test Execution Flow
+### Two Test Systems
+
+**Legacy Tests** (tests/*): String-based output comparison
+- Captures all output and compares to expected/*.out
+- Fragile: breaks on cosmetic changes
+- See "Legacy Test System" section below
+
+**BATS Tests** (tests-bats/*.bats): Semantic assertions
+- Tests specific behaviors, not output format
+- Easier to understand and maintain
+- **Preferred for new tests**
+- See "BATS Test System" section below for overview
+
+**For detailed BATS development guidance, see @tests-bats/CLAUDE.md**
+
+### Legacy Test Execution Flow
 
 1. **make test** (or **make cont** to continue interrupted tests)
 2. For each test in `tests/*`:
@@ -45,6 +60,16 @@ This repo tests pgxntool by:
    - Compares to `expected/*.out`
    - Writes differences to `diffs/*.diff`
 3. Reports success or shows failed test names
+
+### BATS Test Execution Flow
+
+1. **make test-bats** (or individual test like **make test-bats-clone**)
+2. Each .bats file:
+   - Checks if prerequisites are met (e.g., TEST_REPO exists)
+   - Auto-runs prerequisite tests if needed (smart dependencies)
+   - Runs semantic assertions (not string comparisons)
+   - Reports pass/fail per assertion
+3. All tests share same temp environment for speed
 
 ### Test Environment Setup
 
@@ -75,12 +100,29 @@ Tests run in dependency order (see `Makefile`):
 
 ## Common Commands
 
+### Legacy Tests
 ```bash
-make test              # Clean temp environment and run all tests (no need for 'make clean' first)
+make test              # Clean temp environment and run all legacy tests (no need for 'make clean' first)
 make cont              # Continue running tests (skip cleanup)
 make sync-expected     # Copy results/*.out to expected/ (after verifying correctness!)
 make clean             # Remove temporary directories and results
 make print-VARNAME     # Debug: print value of any make variable
+make list              # List all make targets
+```
+
+### BATS Tests
+```bash
+make test-bats         # Run dist.bats test (current default)
+make test-bats-clone   # Run clone test (foundation)
+make test-bats-setup   # Run setup test
+make test-bats-meta    # Run meta test
+# Individual tests auto-run prerequisites if needed
+
+# Run multiple tests in sequence
+test/bats/bin/bats tests-bats/clone.bats
+test/bats/bin/bats tests-bats/setup.bats
+test/bats/bin/bats tests-bats/meta.bats
+test/bats/bin/bats tests-bats/dist.bats
 ```
 
 **Note:** `make test` automatically runs `clean-temp` as a prerequisite, so there's no need to run `make clean` before testing.
@@ -106,26 +148,96 @@ When fixing a test or updating pgxntool:
 
 ```
 pgxntool-test/
-├── Makefile              # Test orchestration
-├── make-temp.sh          # Creates temp test environment
-├── clean-temp.sh         # Cleans up temp environment
-├── lib.sh                # Common utilities for all tests
-├── util.sh               # Additional utilities
-├── base_result.sed       # Sed script for normalizing outputs
-├── tests/
-│   ├── clone             # Test: Clone template and add pgxntool
-│   ├── setup             # Test: Run setup.sh
-│   ├── meta              # Test: META.json generation
-│   ├── dist              # Test: Distribution packaging
-│   ├── make-test         # Test: Run make test
-│   ├── make-results      # Test: Run make results
-│   └── doc               # Test: Documentation generation
-├── expected/             # Expected test outputs
-├── results/              # Actual test outputs (generated)
-└── diffs/                # Differences between expected and actual (generated)
+├── Makefile                  # Test orchestration
+├── make-temp.sh              # Creates temp test environment
+├── clean-temp.sh             # Cleans up temp environment
+├── lib.sh                    # Common utilities for all tests
+├── util.sh                   # Additional utilities
+├── base_result.sed           # Sed script for normalizing outputs
+├── README.md                 # Requirements and usage
+├── BATS-MIGRATION-PLAN.md    # Plan for migrating to BATS
+├── tests/                    # Legacy string-based tests
+│   ├── clone                 # Test: Clone template and add pgxntool
+│   ├── setup                 # Test: Run setup.sh
+│   ├── meta                  # Test: META.json generation
+│   ├── dist                  # Test: Distribution packaging
+│   ├── make-test             # Test: Run make test
+│   ├── make-results          # Test: Run make results
+│   └── doc                   # Test: Documentation generation
+├── tests-bats/               # BATS semantic tests (preferred)
+│   ├── helpers.bash          # Shared BATS utilities
+│   ├── clone.bats            # ✅ Foundation test (8 tests)
+│   ├── setup.bats            # ✅ Setup validation (10 tests)
+│   ├── meta.bats             # ✅ META.json generation (6 tests)
+│   ├── dist.bats             # ✅ Distribution packaging (5 tests)
+│   ├── setup-final.bats      # TODO: Setup idempotence
+│   ├── make-test.bats        # TODO: make test validation
+│   ├── make-results.bats     # TODO: make results validation
+│   └── doc.bats              # TODO: Documentation generation
+├── test/bats/                # BATS framework (git submodule)
+├── expected/                 # Expected test outputs (legacy only)
+├── results/                  # Actual test outputs (generated, legacy only)
+└── diffs/                    # Differences (generated, legacy only)
 ```
 
-## Key Implementation Details
+## BATS Test System
+
+### Architecture
+
+**Smart Prerequisites:**
+Each .bats file checks if required state exists and auto-runs prerequisite tests if needed:
+- `clone.bats` checks if .env exists → creates it if needed
+- `setup.bats` checks if TEST_REPO/pgxntool exists → runs clone.bats if needed
+- `meta.bats` checks if Makefile exists → runs setup.bats if needed
+- `dist.bats` checks if META.json exists → runs meta.bats if needed
+
+**Benefits:**
+- Run full suite: Fast - prerequisites already met, skips them
+- Run individual test: Safe - auto-runs prerequisites
+- No duplicate work in either case
+
+**Example from setup.bats:**
+```bash
+setup_file() {
+  load_test_env || return 1
+
+  # Ensure clone test has completed
+  if [ ! -d "$TEST_REPO/pgxntool" ]; then
+    echo "Prerequisites missing, running clone.bats..."
+    "$BATS_TEST_DIRNAME/../test/bats/bin/bats" "$BATS_TEST_DIRNAME/clone.bats"
+  fi
+}
+```
+
+### Writing New BATS Tests
+
+1. Load helpers: `load helpers`
+2. Check/run prerequisites in `setup_file()`
+3. Write semantic assertions (not string comparisons)
+4. Use `skip` for conditional tests
+5. Test standalone and as part of chain
+
+**Example test:**
+```bash
+@test "setup.sh creates Makefile" {
+  assert_file_exists "Makefile"
+  grep -q "include pgxntool/base.mk" Makefile
+}
+```
+
+### BATS vs Legacy Tests
+
+**Use BATS when:**
+- Testing specific behavior (file exists, command succeeds)
+- Want readable, maintainable tests
+- Writing new tests
+
+**Use Legacy when:**
+- Comparing complete output logs
+- Already have expected output files
+- Testing output format itself
+
+## Key Implementation Details (Legacy Tests)
 
 ### Dynamic Test Discovery
 - `TESTS` auto-discovered from `tests/*` directory
@@ -197,3 +309,4 @@ Tests use file descriptors 8 & 9 to preserve original stdout/stderr while redire
 
 - **../pgxntool/** - The framework being tested
 - **../pgxntool-test-template/** - The minimal extension used as test subject
+- You should never have to run rm -rf .envs; the test system should always know how to handle .envs
