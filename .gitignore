@@ -1,4 +1,7 @@
 .*.swp
+.DS_Store
 
 /.env
+/.envs
 /results
+.claude/*.local.json

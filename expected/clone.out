@@ -1,9 +1,0 @@
-# Cloning tree
-To ../fake_repo
- * [new branch]      master -> master
-Branch master set up to track remote branch master from origin.
-# Installing pgxntool
-warning: no common commits
-From /Users/decibel/git/pgxntool
- * branch            master     -> FETCH_HEAD
-Added dir 'pgxntool'

@@ -1,0 +1,1 @@
+../../../pgxntool/.claude/commands/commit.md
