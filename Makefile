@@ -1,108 +1,61 @@
 .PHONY: all
 all: test
 
-TEST_DIR ?= tests
-DIFF_DIR ?= diffs
-RESULT_DIR ?= results
-RESULT_SED = $(RESULT_DIR)/result.sed
+# Capture git status once at Make parse time
+GIT_DIRTY := $(shell git status --porcelain 2>/dev/null)
 
-DIRS = $(RESULT_DIR) $(DIFF_DIR)
+# Build fresh foundation environment (clean + create)
+# Foundation is the base TEST_REPO that all tests depend on
+.PHONY: foundation
+foundation: clean-envs
+	@test/bats/bin/bats tests/foundation.bats
 
+# Test recursion and pollution detection
+# Cleans environments then runs one independent test, which auto-runs foundation
+# as a prerequisite. This validates that recursion and pollution detection work correctly.
+# Note: Doesn't matter which independent test we use, we just pick the fastest one (test-doc).
+.PHONY: test-recursion
+test-recursion: clean-envs
+	@echo "Testing recursion with clean environment..."
+	@test/bats/bin/bats tests/test-doc.bats
+
+# Run all tests - sequential tests in order, then non-sequential tests
+# Note: We explicitly list all sequential tests rather than just running the last one
+# because BATS only outputs TAP results for the test files directly invoked.
+# If we only ran the last test, prerequisite tests would run but their results
+# wouldn't appear in the output.
 #
-# Test targets
-#
-# We define TEST_TARGETS from TESTS instead of the other way around so you can
-# over-ride what tests will run by defining TESTS
-TESTS ?= $(subst $(TEST_DIR)/,,$(wildcard $(TEST_DIR)/*)) # Can't use pathsubst for some reason
-TEST_TARGETS = $(TESTS:%=test-%)
-
-# Dependencies
-test-setup: test-clone
-
-test-meta: test-setup
-
-test-dist: test-meta
-test-setup-final: test-dist
-
-test-make-test: test-setup-final
-test-doc: test-setup-final
-
-test-make-results: test-make-test
-
+# If git repo is dirty (uncommitted test code changes), runs test-recursion FIRST
+# to validate that recursion/pollution detection still work with the changes.
+# This is critical because changes to test infrastructure (helpers.bash, etc.) could
+# break the prerequisite or pollution detection systems. By running test-recursion
+# first with a clean environment, we exercise these systems before running the full suite.
+# If recursion is broken, we want to know immediately, not after running all tests.
 .PHONY: test
-test: clean-temp cont
+test:
+ifneq ($(GIT_DIRTY),)
+	@echo "Git repo is dirty (uncommitted changes detected)"
+	@echo "Running recursion test first to validate test infrastructure..."
+	$(MAKE) test-recursion
+	@echo ""
+	@echo "Recursion test passed, now running full test suite..."
+endif
+	@$(MAKE) clean-envs
+	@test/bats/bin/bats $$(ls tests/[0-9][0-9]-*.bats 2>/dev/null | sort) tests/test-*.bats
 
-# Just continue what we were building
-.PHONY: cont
-cont: $(TEST_TARGETS)
-	@[ "`cat $(DIFF_DIR)/*.diff 2>/dev/null | head -n1`" == "" ] \
-		&& (echo; echo 'All tests passed!'; echo) \
-		|| (echo; echo "Some tests failed:"; echo ; egrep -lR '.' $(DIFF_DIR); echo; exit 1)
+# Clean test environments
+.PHONY: clean-envs
+clean-envs:
+	@echo "Removing test environments..."
+	@rm -rf .envs
 
-#
-# Actual test targets
-#
-
-.PHONY: $(TEST_TARGETS)
-$(TEST_TARGETS): test-%: $(DIFF_DIR)/%.diff
-
-# Ensure expected files exist so diff doesn't puke
-expected/%.out:
-	@[ -e $@ ] || (echo "CREATING EMPTY $@"; touch $@)
-
-# Generic test environment
-.PHONY: env
-env: .env $(RESULT_SED)
-
-.PHONY: sync-expected
-sync-expected: $(TESTS:%=$(RESULT_DIR)/%.out)
-	cp $^ expected/
-
-# Generic output target
-.PRECIOUS: $(RESULT_DIR)/%.out
-$(RESULT_DIR)/%.out: $(TEST_DIR)/% .env lib.sh | $(RESULT_SED)
-	@echo "Running $<; logging to $@ (temp log=$@.tmp)"
-	@rm -f $@.tmp # Remove old temp file if it exists
-	@LOG=`pwd`/$@.tmp ./$< && mv $@.tmp $@
-
-# Generic diff target
-# TODO: allow controlling whether we stop immediately on error or not
-$(DIFF_DIR)/%.diff: $(RESULT_DIR)/%.out expected/%.out | $(DIFF_DIR)
-	@echo diffing $*
-	@diff -u expected/$*.out $< > $@ && rm $@ || head -n 40 $@
-
-
-#
-# Environment setup
-#
-
-CLEAN += $(DIRS)
-$(DIRS): %:
-	mkdir -p $@
-
-$(RESULT_SED): base_result.sed | $(RESULT_DIR)
-	@echo "Constructing $@"
-	@cp $< $@
-	@if [ `psql -qtc "SELECT current_setting('server_version_num')::int < 90200"` == t ]; then \
-		echo "Enabling support for Postgres < 9.2" ;\
-		echo "s!rm -f  sql/pgxntool-test--0.1.0.sql!rm -rf  sql/pgxntool-test--0.1.0.sql!" >> $@ ;\
-		echo "s!rm -f ../distribution_test!rm -rf ../distribution_test!" >> $@ ;\
-	fi
-
-CLEAN += .env
-.env: make-temp.sh
-	@echo "Creating temporary environment"
-	@./make-temp.sh > .env
-	@RESULT_DIR=`pwd`/$(RESULT_DIR) && echo "RESULT_DIR='$${RESULT_DIR}'" >> .env
-
-.PHONY: clean-temp
-clean: clean-temp
-clean-temp:
-	@[ ! -e .env ] || (echo Removing temporary environment; ./clean-temp.sh)
-
-clean: clean-temp 
-	rm -rf $(CLEAN)
+.PHONY: clean
+clean: clean-envs
 
 # To use this, do make print-VARIABLE_NAME
 print-%	: ; $(info $* is $(flavor $*) variable set to "$($*)") @true
 
+# List all make targets
+.PHONY: list
+list:
+	sh -c "$(MAKE) -p no_targets__ | awk -F':' '/^[a-zA-Z0-9][^\$$#\/\\t=]*:([^=]|$$)/ {split(\$$1,A,/ /);for(i in A)print A[i]}' | grep -v '__\$$' | sort"
