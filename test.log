@@ -1,0 +1,45 @@
+1..28
+# WARNING: pgxntool-test is on 'pgxntool-test' but pgxntool is on 'pgxntool'
+# Using 'master' branch. Set PGXNBRANCH explicitly to override.
+# Environment polluted: 00-validate-tests already completed here (re-run detected)
+#   Completed: 2025-12-22 15:27:21.363830000 -0600
+# Removing sequential environment...
+# Creating sequential environment...
+ok 1 all sequential tests call mark_test_start()
+ok 2 all sequential tests call mark_test_complete()
+ok 3 standalone tests don't use state markers
+ok 4 sequential tests are numbered sequentially
+ok 5 all sequential tests use setup_sequential_test()
+ok 6 all standalone tests use setup_nonsequential_test() or ensure_foundation()
+ok 7 PID safety documentation exists
+# WARNING: pgxntool-test is on 'pgxntool-test' but pgxntool is on 'pgxntool'
+# Using 'master' branch. Set PGXNBRANCH explicitly to override.
+# Running prerequisite: foundation.bats
+# Prerequisite foundation.bats completed
+# Creating foundation environment...
+# Foundation created successfully
+ok 8 META.in.json exists
+ok 9 can modify META.in.json
+ok 10 make regenerates META.json from META.in.json
+ok 11 META.json contains changes from META.in.json
+ok 12 META.json is valid JSON
+ok 13 changes can be committed
+# WARNING: pgxntool-test is on 'pgxntool-test' but pgxntool is on 'pgxntool'
+# Using 'master' branch. Set PGXNBRANCH explicitly to override.
+ok 14 make (default build target) succeeds
+ok 15 make html succeeds
+ok 16 repository is still clean after make targets
+ok 17 make dist creates distribution archive
+ok 18 distribution contains exact expected files
+ok 19 distribution contents pass pattern validation
+ok 20 distribution includes test documentation
+ok 21 make dist fails with untracked files
+ok 22 make dist fails with uncommitted changes
+# WARNING: pgxntool-test is on 'pgxntool-test' but pgxntool is on 'pgxntool'
+# Using 'master' branch. Set PGXNBRANCH explicitly to override.
+ok 23 setup.sh can be run again
+ok 24 setup.sh doesn't overwrite Makefile
+ok 25 setup.sh doesn't overwrite deps.sql
+ok 26 no git changes after re-running setup.sh
+ok 27 deps.sql can be updated with extension name
+ok 28 repository is still in valid state

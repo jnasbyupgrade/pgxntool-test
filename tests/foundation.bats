@@ -130,8 +130,12 @@ teardown_file() {
 
   # Validate prerequisites before attempting git subtree
   # 1. Check PGXNREPO is accessible and safe
-  if [ ! -d "$PGXNREPO/.git" ]; then
-    # Not a local directory - must be a valid remote URL
+  # Check if it's a local git repo:
+  # - Regular git repos have .git as a directory
+  # - Git worktrees have .git as a file (pointing to the main repo's .git/worktrees/)
+  # We need to check both cases to support worktrees
+  if [ ! -d "$PGXNREPO/.git" ] && [ ! -f "$PGXNREPO/.git" ]; then
+    # Not a local repo - must be a valid remote URL
 
     # Explicitly reject dangerous protocols first
     if echo "$PGXNREPO" | grep -qiE '^(file://|ext::)'; then
@@ -144,17 +148,25 @@ teardown_file() {
     fi
   fi
 
-  # 2. For local repos, verify branch exists
-  if [ -d "$PGXNREPO/.git" ]; then
+  # 2. For local repos (regular or worktree), verify branch exists
+  if [ -d "$PGXNREPO/.git" ] || [ -f "$PGXNREPO/.git" ]; then
     if ! (cd "$PGXNREPO" && git rev-parse --verify "$PGXNBRANCH" >/dev/null 2>&1); then
       error "Branch $PGXNBRANCH does not exist in $PGXNREPO"
     fi
   fi
 
-  # 3. Check if source repo is dirty and use rsync if needed
+  # 3. Check if TEST_REPO has uncommitted changes - if so, use rsync
+  # git subtree add requires a clean working tree
+  local test_repo_is_dirty=0
+  if [ -n "$(git status --porcelain)" ]; then
+    test_repo_is_dirty=1
+    out "TEST_REPO has uncommitted changes, using rsync instead of git subtree"
+  fi
+
+  # 4. Check if source repo is dirty and use rsync if needed
   # This matches the legacy test behavior in tests/clone
   local source_is_dirty=0
-  if [ -d "$PGXNREPO/.git" ]; then
+  if [ -d "$PGXNREPO/.git" ] || [ -f "$PGXNREPO/.git" ]; then
     # SECURITY: rsync only works with local paths, never remote URLs
     if [[ "$PGXNREPO" == *://* ]]; then
       error "Cannot use rsync with remote URL: $PGXNREPO"
@@ -165,23 +177,24 @@ teardown_file() {
       local current_branch=$(cd "$PGXNREPO" && git symbolic-ref --short HEAD)
 
       if [ "$current_branch" != "$PGXNBRANCH" ]; then
-        error "Source repo is dirty but on wrong branch ($current_branch, expected $PGXNBRANCH)"
+        out "Source repo is dirty but on wrong branch ($current_branch, expected $PGXNBRANCH), using rsync instead of git subtree"
+      else
+        out "Source repo is dirty and on correct branch, using rsync instead of git subtree"
       fi
-
-      out "Source repo is dirty and on correct branch, using rsync instead of git subtree"
-
-      # Rsync files from source (git doesn't track empty directories, so do this first)
-      mkdir pgxntool
-      rsync -a "$PGXNREPO/" pgxntool/ --exclude=.git
-
-      # Commit all files at once
-      git add --all
-      git commit -m "Committing unsaved pgxntool changes"
     fi
   fi
 
-  # If source wasn't dirty, use git subtree
-  if [ $source_is_dirty -eq 0 ]; then
+  # Use rsync if either repo is dirty
+  if [ $test_repo_is_dirty -eq 1 ] || [ $source_is_dirty -eq 1 ]; then
+    # Rsync files from source (git doesn't track empty directories, so do this first)
+    mkdir -p pgxntool
+    rsync -a "$PGXNREPO/" pgxntool/ --exclude=.git
+
+    # Commit all files at once
+    git add --all
+    git commit -m "Add pgxntool via rsync" || true
+  else
+    # Both repos are clean, use git subtree
     run git subtree add -P pgxntool --squash "$PGXNREPO" "$PGXNBRANCH"
 
     # Capture error output for debugging

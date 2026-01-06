@@ -5,6 +5,7 @@
       "../pgxntool-test-template/"
     ],
     "allow": [
+      "Bash(tee:*)",
       "Bash(make test-bats)",
       "Bash(DEBUG=1 make test-bats:*)",
       "Bash(DEBUG=2 make test-bats:*)",

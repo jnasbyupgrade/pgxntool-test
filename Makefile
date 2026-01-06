@@ -4,10 +4,18 @@ all: test
 # Capture git status once at Make parse time
 GIT_DIRTY := $(shell git status --porcelain 2>/dev/null)
 
+# Initialize BATS submodule if needed
+.PHONY: init-bats
+init-bats:
+	@if [ ! -f "test/bats/bin/bats" ]; then \
+		echo "Initializing BATS submodule..."; \
+		git submodule update --init --recursive test/bats; \
+	fi
+
 # Build fresh foundation environment (clean + create)
 # Foundation is the base TEST_REPO that all tests depend on
 .PHONY: foundation
-foundation: clean-envs
+foundation: init-bats clean-envs
 	@test/bats/bin/bats tests/foundation.bats
 
 # Test recursion and pollution detection
@@ -15,7 +23,7 @@ foundation: clean-envs
 # as a prerequisite. This validates that recursion and pollution detection work correctly.
 # Note: Doesn't matter which independent test we use, we just pick the fastest one (test-doc).
 .PHONY: test-recursion
-test-recursion: clean-envs
+test-recursion: init-bats clean-envs
 	@echo "Testing recursion with clean environment..."
 	@test/bats/bin/bats tests/test-doc.bats
 
@@ -40,8 +48,17 @@ ifneq ($(GIT_DIRTY),)
 	@echo ""
 	@echo "Recursion test passed, now running full test suite..."
 endif
-	@$(MAKE) clean-envs
+	@$(MAKE) init-bats clean-envs
 	@test/bats/bin/bats $$(ls tests/[0-9][0-9]-*.bats 2>/dev/null | sort) tests/test-*.bats
+
+# Individual test targets for convenience
+.PHONY: test-test-build test-test-install test-verify-results
+test-test-build: init-bats clean-envs
+	@test/bats/bin/bats tests/test-test-build.bats
+test-test-install: init-bats clean-envs
+	@test/bats/bin/bats tests/test-test-install.bats
+test-verify-results: init-bats clean-envs
+	@test/bats/bin/bats tests/test-verify-results.bats
 
 # Clean test environments
 .PHONY: clean-envs
