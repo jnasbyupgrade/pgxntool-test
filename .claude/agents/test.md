@@ -432,18 +432,20 @@ When tests don't need to re-verify what was already set up:
 **pgxntool-test** is the test harness for validating **../pgxntool/** (a PostgreSQL extension build framework).
 
 This repo tests pgxntool by:
-1. Cloning **../pgxntool-test-template/** (a minimal "dummy" extension with pgxntool embedded)
-2. Running pgxntool operations (setup, build, test, dist, etc.)
-3. Validating results with semantic assertions
-4. Reporting pass/fail
+1. Creating a fresh test repository (git init + copying extension files from **template/**)
+2. Adding pgxntool via git subtree and running setup.sh
+3. Running pgxntool operations (setup, build, test, dist, etc.)
+4. Validating results with semantic assertions
+5. Reporting pass/fail
 
-### The Three-Repository Pattern
+### The Two-Repository Pattern
 
 - **../pgxntool/** - The framework being tested (embedded into extension projects via git subtree)
-- **../pgxntool-test-template/** - A minimal PostgreSQL extension that serves as test subject
 - **pgxntool-test/** (this repo) - The test harness that validates pgxntool's behavior
 
-**Key insight**: pgxntool cannot be tested in isolation because it's designed to be embedded in other projects. So we clone a template project, inject pgxntool, and test the combination.
+This repository contains template extension files in the `template/` directory which are used to create fresh test repositories.
+
+**Key insight**: pgxntool cannot be tested in isolation because it's designed to be embedded in other projects. So we create a fresh repository with template extension files, add pgxntool via subtree, and test the combination.
 
 ## Test Framework Architecture
 
@@ -760,7 +762,7 @@ Tests use these environment variables (set by helpers):
 - `TEST_REPO` - Cloned test project location (`$TEST_DIR/repo`)
 - `PGXNREPO` - Location of pgxntool (defaults to `../pgxntool`)
 - `PGXNBRANCH` - Branch to use (defaults to `master`)
-- `TEST_TEMPLATE` - Template repo (defaults to `../pgxntool-test-template`)
+- `TEST_TEMPLATE` - Template directory (defaults to `${TOPDIR}/template`)
 - `PG_LOCATION` - PostgreSQL installation path
 - `DEBUG` - Debug level (0-5, higher = more verbose)
 

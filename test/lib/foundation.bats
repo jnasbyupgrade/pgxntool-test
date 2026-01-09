@@ -117,9 +117,9 @@ teardown_file() {
 }
 
 @test "template files are copied to root" {
-  # Copy extension source files from t/ directory to root
+  # Copy extension source files from template directory to root
   # Exclude .DS_Store (macOS system file)
-  rsync -a --exclude='.DS_Store' "$TEST_TEMPLATE"/t/ .
+  rsync -a --exclude='.DS_Store' "$TEST_TEMPLATE"/ .
 }
 
 # CRITICAL: This test makes TEST_REPO behave like a real extension repository.

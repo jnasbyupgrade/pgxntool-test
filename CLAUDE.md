@@ -47,17 +47,18 @@ test -f .claude/commands/commit.md && echo "Symlink is valid" || echo "ERROR: Sy
 **pgxntool-test** is the test harness for validating **../pgxntool/** (a PostgreSQL extension build framework).
 
 This repo tests pgxntool by:
-1. Creating a fresh test repository (git init + copying extension files from **../pgxntool-test-template/t/**)
+1. Creating a fresh test repository (git init + copying extension files from **template/**)
 2. Adding pgxntool via git subtree and running setup.sh
 3. Running pgxntool operations (build, test, dist, etc.)
 4. Validating results with semantic assertions
 5. Reporting pass/fail
 
-## The Three-Repository Pattern
+## The Two-Repository Pattern
 
 - **../pgxntool/** - The framework being tested (embedded into extension projects via git subtree)
-- **../pgxntool-test-template/** - A minimal PostgreSQL extension that serves as test subject
 - **pgxntool-test/** (this repo) - The test harness that validates pgxntool's behavior
+
+This repository contains template extension files in the `template/` directory which are used to create fresh test repositories.
 
 **Key insight**: pgxntool cannot be tested in isolation because it's designed to be embedded in other projects. So we create a fresh repository with template extension files, add pgxntool via subtree, and test the combination.
 
@@ -71,8 +72,7 @@ This repo tests pgxntool by:
 **Why this matters**: When extension developers run `git subtree add`, they pull the entire pgxntool directory into their project. Any extraneous files (development scripts, testing tools, etc.) will pollute their repositories.
 
 **Where to put development tools**:
-- **pgxntool-test/** - Test infrastructure, BATS tests, test helpers
-- **pgxntool-test-template/** - Example extension files for testing
+- **pgxntool-test/** - Test infrastructure, BATS tests, test helpers, template extension files
 - Your local environment - Convenience scripts that don't need to be in version control
 
 ### Critical: .gitattributes Belongs ONLY in pgxntool

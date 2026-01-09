@@ -212,14 +212,14 @@ setup_pgxntool_vars() {
   # Set defaults
   PGXNBRANCH=${PGXNBRANCH:-master}
   PGXNREPO=${PGXNREPO:-${TOPDIR}/../pgxntool}
-  TEST_TEMPLATE=${TEST_TEMPLATE:-${TOPDIR}/../pgxntool-test-template}
+  TEST_TEMPLATE=${TEST_TEMPLATE:-${TOPDIR}/template}
   TEST_REPO=${TEST_DIR}/repo
   debug_vars 3 PGXNBRANCH PGXNREPO TEST_TEMPLATE TEST_REPO
 
   # Normalize repository paths
   PG_LOCATION=$(pg_config --bindir | sed 's#/bin##')
   PGXNREPO=$(find_repo "$PGXNREPO")
-  TEST_TEMPLATE=$(find_repo "$TEST_TEMPLATE")
+  # TEST_TEMPLATE is now a local directory, not a repository
   debug_vars 5 PG_LOCATION PGXNREPO TEST_TEMPLATE
 
   # Export for use in tests

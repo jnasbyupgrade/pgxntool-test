@@ -18,8 +18,7 @@
       "Edit"
     ],
     "additionalDirectories": [
-      "../pgxntool/",
-      "../pgxntool-test-template/"
+      "../pgxntool/"
     ]
   }
 }
