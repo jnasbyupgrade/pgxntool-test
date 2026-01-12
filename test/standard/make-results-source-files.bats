@@ -7,7 +7,7 @@
 # - Ephemeral files from output/*.source → expected/*.out are cleaned by make clean
 # - make results skips files that have output/*.source counterparts (source of truth)
 
-load helpers
+load ../lib/helpers
 
 # Debug function to list files matching a glob pattern
 # Usage: debug_ls LEVEL LABEL GLOB_PATTERN
@@ -67,8 +67,8 @@ transform_files() {
 
 setup_file() {
   # Set TOPDIR
-  cd "$BATS_TEST_DIRNAME/.."
-  export TOPDIR=$(pwd)
+  setup_topdir
+
 
   # Independent test - gets its own isolated environment with foundation TEST_REPO
   load_test_env "make-results-source"
@@ -88,6 +88,8 @@ setup() {
 }
 
 @test "ephemeral files are created by pg_regress" {
+  skip_if_no_postgres
+  
   # Track all files we create and expect (global so other tests can use them)
   input_source_files=()
   output_source_files=()
@@ -171,6 +173,7 @@ EOF
 }
 
 @test "make results skips files with output source counterparts" {
+  skip_if_no_postgres
   # This test uses files created in the previous test
   # Verify both the ephemeral expected file (from source) and actual results exist
   assert_file_exists "test/expected/another-test.out"
@@ -205,6 +208,7 @@ EOF
 }
 
 @test "make results copies files without output source counterparts" {
+  skip_if_no_postgres
   # This test uses files created in the first test
   # Verify result exists and has content
   assert_file_exists "test/results/pgxntool-test.out"
@@ -246,6 +250,7 @@ EOF
 }
 
 @test "make results handles mixed source and non-source files" {
+  skip_if_no_postgres
   # This test uses files created in the first test
   # Verify both types of files exist
   assert_file_exists "test/results/pgxntool-test.out"

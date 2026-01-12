@@ -20,7 +20,30 @@
 # race condition failures when running multiple tests concurrently.
 
 # Load assertion functions
-load assertions
+# Note: BATS resolves load paths relative to the test file, not this file.
+# Since test files load this as ../lib/helpers, we need to use ../lib/assertions
+# to find assertions.bash in the same directory as this file.
+load ../lib/assertions
+
+# Set TOPDIR to the repository root
+# This function should be called in setup_file() before using TOPDIR
+# It works from any test file location (test/standard/, test/sequential/, test/lib/, etc.)
+setup_topdir() {
+  if [ -z "$TOPDIR" ]; then
+    # Try to find repo root by looking for .git directory
+    local dir="${BATS_TEST_DIRNAME:-.}"
+    while [ "$dir" != "/" ] && [ ! -d "$dir/.git" ]; do
+      dir=$(dirname "$dir")
+    done
+    if [ -d "$dir/.git" ]; then
+      export TOPDIR="$dir"
+    else
+      # Fallback: go up from test directory (test/standard -> test -> repo root)
+      cd "$BATS_TEST_DIRNAME/../.." 2>/dev/null || cd "$BATS_TEST_DIRNAME/.." 2>/dev/null || cd .
+      export TOPDIR=$(pwd)
+    fi
+  fi
+}
 
 # Output to terminal (always visible)
 # Usage: out "message"
@@ -189,14 +212,14 @@ setup_pgxntool_vars() {
   # Set defaults
   PGXNBRANCH=${PGXNBRANCH:-master}
   PGXNREPO=${PGXNREPO:-${TOPDIR}/../pgxntool}
-  TEST_TEMPLATE=${TEST_TEMPLATE:-${TOPDIR}/../pgxntool-test-template}
+  TEST_TEMPLATE=${TEST_TEMPLATE:-${TOPDIR}/template}
   TEST_REPO=${TEST_DIR}/repo
   debug_vars 3 PGXNBRANCH PGXNREPO TEST_TEMPLATE TEST_REPO
 
   # Normalize repository paths
   PG_LOCATION=$(pg_config --bindir | sed 's#/bin##')
   PGXNREPO=$(find_repo "$PGXNREPO")
-  TEST_TEMPLATE=$(find_repo "$TEST_TEMPLATE")
+  # TEST_TEMPLATE is now a local directory, not a repository
   debug_vars 5 PG_LOCATION PGXNREPO TEST_TEMPLATE
 
   # Export for use in tests
@@ -206,8 +229,13 @@ setup_pgxntool_vars() {
 # Load test environment for given environment name
 # Auto-creates the environment if it doesn't exist
 # Usage: load_test_env "sequential" or load_test_env "doc"
+# Note: TOPDIR must be set before calling this function (use setup_topdir() in setup_file)
 load_test_env() {
   local env_name=${1:-sequential}
+  # Ensure TOPDIR is set
+  if [ -z "$TOPDIR" ]; then
+    setup_topdir
+  fi
   local env_file="$TOPDIR/.envs/$env_name/.env"
 
   # Auto-create if doesn't exist
@@ -279,7 +307,7 @@ is_clean_state() {
   done
 
   # Dynamically determine test order from directory (sorted)
-  local test_order=$(cd "$TOPDIR/tests" && ls [0-9][0-9]-*.bats 2>/dev/null | sort | sed 's/\.bats$//' | xargs)
+  local test_order=$(cd "$TOPDIR/test/sequential" && ls [0-9][0-9]-*.bats 2>/dev/null | sort | sed 's/\.bats$//' | xargs)
 
   debug 3 "is_clean_state: Test order: $test_order"
 
@@ -460,8 +488,10 @@ setup_sequential_test() {
     return 1
   fi
 
-  cd "$BATS_TEST_DIRNAME/.."
-  export TOPDIR=$(pwd)
+  # Ensure TOPDIR is set
+  if [ -z "$TOPDIR" ]; then
+    setup_topdir
+  fi
 
   # 1. Load environment
   load_test_env "sequential" || return 1
@@ -482,7 +512,17 @@ setup_sequential_test() {
   # 4. Ensure immediate prereq completed
   if [ -n "$immediate_prereq" ]; then
     debug 2 "setup_sequential_test: Checking prereq $immediate_prereq"
-    if [ ! -f "$TEST_DIR/.bats-state/.complete-$immediate_prereq" ]; then
+
+    # Foundation is special - it has its own environment with its own completion marker
+    # Check foundation's own marker, not sequential's copy
+    local prereq_complete_marker
+    if [ "$immediate_prereq" = "foundation" ]; then
+      prereq_complete_marker="$TOPDIR/.envs/foundation/.bats-state/.foundation-complete"
+    else
+      prereq_complete_marker="$TEST_DIR/.bats-state/.complete-$immediate_prereq"
+    fi
+
+    if [ ! -f "$prereq_complete_marker" ]; then
       # State marker doesn't exist - must run prerequisite
       # Individual @test blocks will skip if work is already done
       out "Running prerequisite: $immediate_prereq.bats"
@@ -490,7 +530,19 @@ setup_sequential_test() {
       # Run prereq (it handles its own deps recursively)
       # Filter stdout for TAP comments to FD3, leave stderr alone
       # OK to fail: grep returns non-zero if no matches, but we want empty output in that case
-      "$BATS_TEST_DIRNAME/../test/bats/bin/bats" "$BATS_TEST_DIRNAME/$immediate_prereq.bats" | { grep '^#' || true; } >&3
+
+      # Special case: foundation.bats lives in test/lib/, not test/sequential/
+      local prereq_path
+      if [ "$immediate_prereq" = "foundation" ]; then
+        prereq_path="$TOPDIR/test/lib/foundation.bats"
+      else
+        prereq_path="$BATS_TEST_DIRNAME/$immediate_prereq.bats"
+      fi
+
+      debug 3 "Prerequisite path: $prereq_path"
+      debug 3 "Running: $TOPDIR/test/bats/bin/bats $prereq_path"
+
+      "$TOPDIR/test/bats/bin/bats" "$prereq_path" | { grep '^#' || true; } >&3
       local prereq_status=${PIPESTATUS[0]}
       if [ $prereq_status -ne 0 ]; then
         out "ERROR: Prerequisite $immediate_prereq failed"
@@ -586,7 +638,16 @@ setup_nonsequential_test() {
       # Individual @test blocks will skip if work is already done
       out "Running prerequisite: $prereq.bats"
       # OK to fail: grep returns non-zero if no matches, but we want empty output in that case
-      "$BATS_TEST_DIRNAME/../test/bats/bin/bats" "$BATS_TEST_DIRNAME/$prereq.bats" | { grep '^#' || true; } >&3
+
+      # Special case: foundation.bats lives in test/lib/, not test/sequential/
+      local prereq_path
+      if [ "$prereq" = "foundation" ]; then
+        prereq_path="$TOPDIR/test/lib/foundation.bats"
+      else
+        prereq_path="$BATS_TEST_DIRNAME/$prereq.bats"
+      fi
+
+      "$TOPDIR/test/bats/bin/bats" "$prereq_path" | { grep '^#' || true; } >&3
       [ ${PIPESTATUS[0]} -eq 0 ] || return 1
       out "Prerequisite $prereq.bats completed"
     done
@@ -665,7 +726,7 @@ ensure_foundation() {
     local age=$((now - mtime))
     debug 3 "ensure_foundation: Foundation is $age seconds old"
 
-    if [ $age -gt 10 ]; then
+    if [ $age -gt 60 ]; then
       out "WARNING: Foundation is $age seconds old, may be out of date."
       out "         If you've modified pgxntool, run 'make foundation' to rebuild."
     fi
@@ -674,8 +735,13 @@ ensure_foundation() {
     out "Creating foundation environment..."
 
     # Run foundation.bats to create it
+    # Note: foundation.bats is in test/lib/ (same directory as helpers.bash)
+    # Use TOPDIR to find bats binary (test/bats/bin/bats relative to repo root)
     # OK to fail: grep returns non-zero if no matches, but we want empty output in that case
-    "$BATS_TEST_DIRNAME/../test/bats/bin/bats" "$BATS_TEST_DIRNAME/foundation.bats" | { grep '^#' || true; } >&3
+    if [ -z "$TOPDIR" ]; then
+      setup_topdir
+    fi
+    "$TOPDIR/test/bats/bin/bats" "$TOPDIR/test/lib/foundation.bats" | { grep '^#' || true; } >&3
     local status=${PIPESTATUS[0]}
 
     if [ $status -ne 0 ]; then
@@ -710,6 +776,445 @@ ensure_foundation() {
   fi
 
   debug 3 "ensure_foundation: Foundation copied successfully"
+}
+
+# ============================================================================
+# PostgreSQL Availability Detection
+# ============================================================================
+
+# Global variable to cache PostgreSQL availability check result
+# Values: 0 (available), 1 (unavailable), or "" (not checked yet)
+_POSTGRES_AVAILABLE=""
+
+# Check if PostgreSQL is available and running
+#
+# This function performs a comprehensive check:
+# 1. Checks if pg_config is available (PostgreSQL development tools installed)
+# 2. Checks if psql is available (PostgreSQL client installed)
+# 3. Checks if PostgreSQL server is running (attempts connection using plain `psql`)
+#
+# IMPORTANT: This function assumes the user has configured PostgreSQL environment
+# variables (PGHOST, PGPORT, PGUSER, PGDATABASE, PGPASSWORD, etc.) so that a plain
+# `psql` command works without additional flags. This keeps the test framework simple.
+#
+# The result is cached in _POSTGRES_AVAILABLE to avoid repeated expensive checks.
+#
+# Usage:
+#   if ! check_postgres_available; then
+#     skip "PostgreSQL not available: $POSTGRES_UNAVAILABLE_REASON"
+#   fi
+#
+# Or use the convenience function:
+#   skip_if_no_postgres
+#
+# Returns:
+#   0 if PostgreSQL is available and running
+#   1 if PostgreSQL is not available (with reason in POSTGRES_UNAVAILABLE_REASON)
+check_postgres_available() {
+  # Return cached result if available
+  if [ -n "${_POSTGRES_AVAILABLE:-}" ]; then
+    return $_POSTGRES_AVAILABLE
+  fi
+
+  # Reset reason variable
+  POSTGRES_UNAVAILABLE_REASON=""
+
+  # Check 1: pg_config available
+  if ! command -v pg_config >/dev/null 2>&1; then
+    POSTGRES_UNAVAILABLE_REASON="pg_config not found (PostgreSQL development tools not installed)"
+    _POSTGRES_AVAILABLE=1
+    return 1
+  fi
+
+  # Check 2: psql available
+  local psql_path
+  psql_path=$(get_psql_path)
+  if [ -z "$psql_path" ]; then
+    POSTGRES_UNAVAILABLE_REASON="psql not found (PostgreSQL client not installed)"
+    _POSTGRES_AVAILABLE=1
+    return 1
+  fi
+
+  # Check 3: PostgreSQL server running
+  # Assume user has configured environment variables (PGHOST, PGPORT, PGUSER, PGDATABASE, etc.)
+  # so that a plain `psql` command works. This keeps the test framework simple.
+  local connect_error
+  if ! connect_error=$("$psql_path" -c "SELECT 1;" 2>&1); then
+    # Determine the specific reason
+    if echo "$connect_error" | grep -qi "could not connect\|connection refused\|connection timed out\|no such file or directory"; then
+      POSTGRES_UNAVAILABLE_REASON="PostgreSQL server not running or not accessible (check PGHOST, PGPORT, etc.)"
+    elif echo "$connect_error" | grep -qi "password authentication failed"; then
+      POSTGRES_UNAVAILABLE_REASON="PostgreSQL authentication failed (check PGPASSWORD, .pgpass, or pg_hba.conf)"
+    elif echo "$connect_error" | grep -qi "role.*does not exist\|database.*does not exist"; then
+      POSTGRES_UNAVAILABLE_REASON="PostgreSQL user/database not found (check PGUSER, PGDATABASE, etc.)"
+    else
+      # Use first 5 lines of error for context
+      POSTGRES_UNAVAILABLE_REASON="PostgreSQL not accessible: $(echo "$connect_error" | head -5 | tr '\n' '; ' | sed 's/; $//')"
+    fi
+    _POSTGRES_AVAILABLE=1
+    return 1
+  fi
+
+  # All checks passed
+  _POSTGRES_AVAILABLE=0
+  return 0
+}
+
+# Convenience function to skip test if PostgreSQL is not available
+#
+# Usage:
+#   @test "my test that needs PostgreSQL" {
+#     skip_if_no_postgres
+#     # ... rest of test ...
+#   }
+#
+# This function:
+# - Checks PostgreSQL availability (cached after first check)
+# - Skips the test with a helpful message if unavailable
+# - Does nothing if PostgreSQL is available
+skip_if_no_postgres() {
+  if ! check_postgres_available; then
+    skip "PostgreSQL not available: $POSTGRES_UNAVAILABLE_REASON"
+  fi
+}
+
+# Global variable to cache psql path
+# Value: path to psql executable, "__NOT_FOUND__" (checked but not found), or unset (not checked yet)
+_PSQL_PATH=""
+
+# Get psql executable path
+# Returns path to psql or empty string if not found
+# Caches result in _PSQL_PATH to avoid repeated lookups
+# Uses "__NOT_FOUND__" as magic value to cache "checked but not found" state
+get_psql_path() {
+  # Return cached result if available
+  if [ -n "${_PSQL_PATH:-}" ]; then
+    if [ "$_PSQL_PATH" = "__NOT_FOUND__" ]; then
+      echo ""
+      return 1
+    else
+      echo "$_PSQL_PATH"
+      return 0
+    fi
+  fi
+
+  local psql_path
+  if ! psql_path=$(command -v psql 2>/dev/null); then
+    # Try to find psql via pg_config
+    local pg_bindir
+    pg_bindir=$(pg_config --bindir 2>/dev/null || echo "")
+    if [ -n "$pg_bindir" ] && [ -x "$pg_bindir/psql" ]; then
+      psql_path="$pg_bindir/psql"
+    else
+      _PSQL_PATH="__NOT_FOUND__"
+      echo ""
+      return 1
+    fi
+  fi
+  _PSQL_PATH="$psql_path"
+  echo "$psql_path"
+  return 0
+}
+
+# Check if pg_tle extension is available in the PostgreSQL cluster
+#
+# This function checks if:
+# - PostgreSQL is available (reuses check_postgres_available)
+# - pg_tle extension is available in the cluster (can be created with CREATE EXTENSION)
+#
+# Note: This checks for availability at the cluster level, not whether
+# the extension has been created in a specific database.
+#
+# Sets global variable _PGTLE_AVAILABLE to 0 (available) or 1 (unavailable)
+# Sets PGTLE_UNAVAILABLE_REASON with helpful error message
+# Returns 0 if available, 1 if not
+check_pgtle_available() {
+  # Use cached result if available (check FIRST)
+  if [ -n "${_PGTLE_AVAILABLE:-}" ]; then
+    return $_PGTLE_AVAILABLE
+  fi
+
+  # First check if PostgreSQL is available
+  if ! check_postgres_available; then
+    PGTLE_UNAVAILABLE_REASON="PostgreSQL not available: $POSTGRES_UNAVAILABLE_REASON"
+    _PGTLE_AVAILABLE=1
+    return 1
+  fi
+
+  # Reset reason variable
+  PGTLE_UNAVAILABLE_REASON=""
+
+  # Get psql path
+  local psql_path
+  psql_path=$(get_psql_path)
+  if [ -z "$psql_path" ]; then
+    PGTLE_UNAVAILABLE_REASON="psql not found"
+    _PGTLE_AVAILABLE=1
+    return 1
+  fi
+
+  # Check if pg_tle is available in cluster
+  # pg_available_extensions shows extensions that can be created with CREATE EXTENSION
+  # Use -X to ignore .psqlrc which may add timing or other output
+  local pgtle_available
+  if ! pgtle_available=$("$psql_path" -X -tAc "SELECT EXISTS(SELECT 1 FROM pg_available_extensions WHERE name = 'pg_tle');" 2>&1); then
+    PGTLE_UNAVAILABLE_REASON="Failed to query pg_available_extensions: $(echo "$pgtle_available" | head -5 | tr '\n' '; ' | sed 's/; $//')"
+    _PGTLE_AVAILABLE=1
+    return 1
+  fi
+
+  # Trim whitespace and newlines from result
+  pgtle_available=$(echo "$pgtle_available" | tr -d '[:space:]')
+
+  if [ "$pgtle_available" != "t" ]; then
+    PGTLE_UNAVAILABLE_REASON="pg_tle extension not available in cluster (install pg_tle extension first)"
+    _PGTLE_AVAILABLE=1
+    return 1
+  fi
+
+  # All checks passed
+  _PGTLE_AVAILABLE=0
+  return 0
+}
+
+# Convenience function to skip test if pg_tle is not available
+#
+# Usage:
+#   @test "my test that needs pg_tle" {
+#     skip_if_no_pgtle
+#     # ... rest of test ...
+#   }
+#
+# This function:
+# - Checks pg_tle availability (cached after first check)
+# - Skips the test with a helpful message if unavailable
+# - Does nothing if pg_tle is available
+skip_if_no_pgtle() {
+  if ! check_pgtle_available; then
+    skip "pg_tle not available: $PGTLE_UNAVAILABLE_REASON"
+  fi
+}
+
+# ============================================================================
+# Directory Management
+# ============================================================================
+
+# Change directory with assertion
+# Usage: assert_cd "directory"
+#
+# This function attempts to change to the specified directory and errors out
+# with a clear message if the cd fails. This is safer than bare `cd` commands
+# which can fail silently or cause confusing test failures.
+#
+# Examples:
+#   assert_cd "$TEST_REPO"
+#   assert_cd "$TEST_DIR"
+#   assert_cd /tmp
+assert_cd() {
+  local target_dir="$1"
+
+  if [ -z "$target_dir" ]; then
+    error "assert_cd: directory argument required"
+  fi
+
+  if ! cd "$target_dir" 2>/dev/null; then
+    error "Failed to cd to directory: $target_dir"
+  fi
+
+  debug 5 "Changed directory to: $PWD"
+  return 0
+}
+
+# Change to the test environment directory
+# Usage: cd_test_env
+#
+# This convenience function changes to TEST_REPO for tests that need to be
+# in the repository directory. For tests that run before TEST_REPO exists,
+# use assert_cd() directly instead.
+#
+# Examples:
+#   cd_test_env  # Changes to TEST_REPO
+#   assert_cd "$TEST_DIR"  # For early foundation tests
+cd_test_env() {
+  # Only handles the common case: cd to TEST_REPO
+  # For other cases, use assert_cd() directly
+  assert_cd "$TEST_REPO"
+}
+
+# Global variable to cache current pg_tle extension version
+# Format: "version" (e.g., "1.4.0") or "" if not created
+_PGTLE_CURRENT_VERSION=""
+
+# Global variable to track if we've checked pg_tle version
+# Values: "checked" or "" (not checked yet)
+_PGTLE_VERSION_CHECKED=""
+
+# Ensure pg_tle extension is created/updated
+#
+# This function ensures the pg_tle extension exists in the database at the
+# requested version. It caches the current version to avoid repeated queries.
+#
+# Usage:
+#   ensure_pgtle_extension [version]
+#
+# Arguments:
+#   version (optional): Specific pg_tle version to install (e.g., "1.4.0")
+#                       If not provided, creates extension or updates to newest
+#
+# Behavior:
+#   - If no version specified:
+#     * Creates extension if it doesn't exist
+#     * Updates to newest version if it exists but is not latest
+#   - If version specified:
+#     * Creates at that version if extension doesn't exist
+#     * Updates to that version if different version is installed
+#     * Drops and recreates if needed to change version
+#
+# Caching:
+#   - Caches current version in _PGTLE_CURRENT_VERSION
+#   - Only queries database once per test run
+#
+# Error handling:
+#   - Sets PGTLE_EXTENSION_ERROR with helpful error message on failure
+#   - Returns 0 on success, 1 on failure
+#
+# Example:
+#   ensure_pgtle_extension || skip "pg_tle extension cannot be created: $PGTLE_EXTENSION_ERROR"
+#   ensure_pgtle_extension "1.4.0" || skip "Cannot install pg_tle 1.4.0: $PGTLE_EXTENSION_ERROR"
+#
+# Reset pg_tle cache
+# Clears cached version information so it will be re-checked
+reset_pgtle_cache() {
+  _PGTLE_VERSION_CHECKED=""
+  _PGTLE_CURRENT_VERSION=""
+}
+
+ensure_pgtle_extension() {
+  local requested_version="${1:-}"
+  
+  # First ensure PostgreSQL is available
+  if ! check_postgres_available; then
+    PGTLE_EXTENSION_ERROR="PostgreSQL not available: $POSTGRES_UNAVAILABLE_REASON"
+    return 1
+  fi
+  
+  # Get psql path
+  local psql_path
+  psql_path=$(get_psql_path)
+  if [ -z "$psql_path" ]; then
+    PGTLE_EXTENSION_ERROR="psql not found"
+    return 1
+  fi
+  
+  # Check current version if not cached
+  if [ "$_PGTLE_VERSION_CHECKED" != "checked" ]; then
+    _PGTLE_CURRENT_VERSION=$("$psql_path" -X -tAc "SELECT extversion FROM pg_extension WHERE extname = 'pg_tle';" 2>/dev/null | tr -d '[:space:]' || echo "")
+    _PGTLE_VERSION_CHECKED="checked"
+  fi
+  
+  # Reset error variable
+  PGTLE_EXTENSION_ERROR=""
+  
+  # If no version requested, create or update to newest
+  if [ -z "$requested_version" ]; then
+    if [ -z "$_PGTLE_CURRENT_VERSION" ]; then
+      # Extension doesn't exist, create it
+      local create_error
+      if ! create_error=$("$psql_path" -X -c "CREATE EXTENSION pg_tle;" 2>&1); then
+        # Determine the specific reason
+        if echo "$create_error" | grep -qi "shared_preload_libraries"; then
+          PGTLE_EXTENSION_ERROR="pg_tle not configured in shared_preload_libraries (add 'pg_tle' to shared_preload_libraries in postgresql.conf and restart PostgreSQL)"
+        elif echo "$create_error" | grep -qi "extension.*already exists"; then
+          # Extension exists but wasn't in cache, refresh cache and continue
+          _PGTLE_CURRENT_VERSION=$("$psql_path" -X -tAc "SELECT extversion FROM pg_extension WHERE extname = 'pg_tle';" 2>/dev/null | tr -d '[:space:]' || echo "")
+        else
+          # Use first 5 lines of error for context
+          PGTLE_EXTENSION_ERROR="Failed to create pg_tle extension: $(echo "$create_error" | head -5 | tr '\n' '; ' | sed 's/; $//')"
+        fi
+        if [ -n "$PGTLE_EXTENSION_ERROR" ]; then
+          return 1
+        fi
+      fi
+      # Update cache after creation
+      _PGTLE_CURRENT_VERSION=$("$psql_path" -X -tAc "SELECT extversion FROM pg_extension WHERE extname = 'pg_tle';" 2>/dev/null | tr -d '[:space:]' || echo "")
+    else
+      # Extension exists, check if update needed
+      local newest_version
+      newest_version=$("$psql_path" -X -tAc "SELECT MAX(version) FROM pg_available_extension_versions WHERE name = 'pg_tle';" 2>/dev/null | tr -d '[:space:]' || echo "")
+      if [ -n "$newest_version" ] && [ "$_PGTLE_CURRENT_VERSION" != "$newest_version" ]; then
+        local update_error
+        if ! update_error=$("$psql_path" -X -c "ALTER EXTENSION pg_tle UPDATE;" 2>&1); then
+          PGTLE_EXTENSION_ERROR="Failed to update pg_tle extension: $(echo "$update_error" | head -5 | tr '\n' '; ' | sed 's/; $//')"
+          return 1
+        fi
+        # Update cache
+        _PGTLE_CURRENT_VERSION=$("$psql_path" -X -tAc "SELECT extversion FROM pg_extension WHERE extname = 'pg_tle';" 2>/dev/null | tr -d '[:space:]' || echo "")
+      fi
+    fi
+  else
+    # Version specified - ensure extension is at that version
+    if [ -z "$_PGTLE_CURRENT_VERSION" ]; then
+      # Extension doesn't exist, create at requested version
+      local create_error
+      if ! create_error=$("$psql_path" -X -c "CREATE EXTENSION pg_tle VERSION '$requested_version';" 2>&1); then
+        if echo "$create_error" | grep -qi "shared_preload_libraries"; then
+          PGTLE_EXTENSION_ERROR="pg_tle not configured in shared_preload_libraries (add 'pg_tle' to shared_preload_libraries in postgresql.conf and restart PostgreSQL)"
+        elif echo "$create_error" | grep -qi "version.*does not exist"; then
+          PGTLE_EXTENSION_ERROR="pg_tle version '$requested_version' not available in cluster"
+        else
+          PGTLE_EXTENSION_ERROR="Failed to create pg_tle extension at version '$requested_version': $(echo "$create_error" | head -5 | tr '\n' '; ' | sed 's/; $//')"
+        fi
+        return 1
+      fi
+      # Update cache
+      _PGTLE_CURRENT_VERSION=$("$psql_path" -X -tAc "SELECT extversion FROM pg_extension WHERE extname = 'pg_tle';" 2>/dev/null | tr -d '[:space:]' || echo "")
+    elif [ "$_PGTLE_CURRENT_VERSION" != "$requested_version" ]; then
+      # Extension exists at different version, try to update first
+      local update_error
+      if ! update_error=$("$psql_path" -X -c "ALTER EXTENSION pg_tle UPDATE TO '$requested_version';" 2>&1); then
+        # Update failed, may need to drop and recreate
+        if echo "$update_error" | grep -qi "version.*does not exist\|cannot.*update"; then
+          # Version doesn't exist or can't update directly, drop and recreate
+          local drop_error
+          if ! drop_error=$("$psql_path" -X -c "DROP EXTENSION pg_tle CASCADE;" 2>&1); then
+            PGTLE_EXTENSION_ERROR="Failed to drop pg_tle extension: $(echo "$drop_error" | head -5 | tr '\n' '; ' | sed 's/; $//')"
+            return 1
+          fi
+          # Now create at requested version
+          if ! create_error=$("$psql_path" -X -c "CREATE EXTENSION pg_tle VERSION '$requested_version';" 2>&1); then
+            if echo "$create_error" | grep -qi "version.*does not exist"; then
+              PGTLE_EXTENSION_ERROR="pg_tle version '$requested_version' not available in cluster"
+            else
+              PGTLE_EXTENSION_ERROR="Failed to create pg_tle extension at version '$requested_version': $(echo "$create_error" | head -5 | tr '\n' '; ' | sed 's/; $//')"
+            fi
+            return 1
+          fi
+        elif echo "$update_error" | grep -qi "extension.*does not exist"; then
+          # Extension doesn't exist (cache was stale), create it
+          if ! create_error=$("$psql_path" -X -c "CREATE EXTENSION pg_tle VERSION '$requested_version';" 2>&1); then
+            if echo "$create_error" | grep -qi "version.*does not exist"; then
+              PGTLE_EXTENSION_ERROR="pg_tle version '$requested_version' not available in cluster"
+            else
+              PGTLE_EXTENSION_ERROR="Failed to create pg_tle extension at version '$requested_version': $(echo "$create_error" | head -5 | tr '\n' '; ' | sed 's/; $//')"
+            fi
+            return 1
+          fi
+        else
+          PGTLE_EXTENSION_ERROR="Failed to update pg_tle extension to version '$requested_version': $(echo "$update_error" | head -5 | tr '\n' '; ' | sed 's/; $//')"
+          return 1
+        fi
+      fi
+      # Update cache
+      _PGTLE_CURRENT_VERSION=$("$psql_path" -X -tAc "SELECT extversion FROM pg_extension WHERE extname = 'pg_tle';" 2>/dev/null | tr -d '[:space:]' || echo "")
+    fi
+    # Verify we're at the requested version
+    if [ "$_PGTLE_CURRENT_VERSION" != "$requested_version" ]; then
+      PGTLE_EXTENSION_ERROR="pg_tle extension is at version '$_PGTLE_CURRENT_VERSION', not requested version '$requested_version'"
+      return 1
+    fi
+  fi
+  
+  return 0
 }
 
 # vi: expandtab sw=2 ts=2

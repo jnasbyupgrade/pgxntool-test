@@ -1,11 +1,33 @@
 ---
 description: Create a git commit following project standards and safety protocols
-allowed-tools: Bash(git status:*), Bash(git log:*), Bash(git add:*), Bash(git diff:*), Bash(git commit:*), Bash(make test:*), Bash(asciidoctor:*)
+allowed-tools: Bash(git status:*), Bash(git log:*), Bash(git add:*), Bash(git diff:*), Bash(git commit:*), Bash(make test:*)
 ---
 
 # commit
 
-Create a git commit following all project standards and safety protocols for pgxntool repositories.
+Create a git commit following all project standards and safety protocols for pgxntool-test.
+
+**FIRST: Check BOTH repositories for changes**
+
+**CRITICAL**: Before doing ANYTHING else, you MUST check git status in both repositories to understand the full scope of changes:
+
+```bash
+# Check pgxntool (main framework)
+echo "=== pgxntool status ==="
+cd ../pgxntool && git status
+
+# Check pgxntool-test (test harness)
+echo "=== pgxntool-test status ==="
+cd ../pgxntool-test && git status
+```
+
+**Why this matters**: Work on pgxntool frequently involves changes across both repositories. You need to understand the complete picture before committing anywhere.
+
+**IMPORTANT**: If BOTH repositories have changes, you should commit BOTH of them (unless the user explicitly says otherwise). This ensures related changes stay synchronized across the repos.
+
+**DO NOT create empty commits** - Only commit repos that actually have changes (modified/untracked files). If a repo has no changes, skip it.
+
+---
 
 **CRITICAL REQUIREMENTS:**
 
@@ -23,68 +45,194 @@ Create a git commit following all project standards and safety protocols for pgx
 
 **WORKFLOW:**
 
-1. **If in pgxntool**: Check if `README.html` needs regeneration:
-   ```bash
-   if [ ! -f README.html ] || [ README.asc -nt README.html ]; then
-     asciidoctor README.asc -o README.html
-   fi
-   ```
-   - If HTML was generated, sanity-check it (exists, not empty, reasonable size, contains HTML tags)
-   - If generation fails or file looks wrong: STOP and inform the user
+1. Run in parallel: `git status`, `git diff --stat`, `git log -10 --oneline`
 
-2. Run in parallel: `git status`, `git diff --stat`, `git log -10 --oneline`
-
-3. Check test status - THIS IS MANDATORY:
+2. Check test status - THIS IS MANDATORY:
    - Run `make test 2>&1 | tee /tmp/test-output.txt`
    - Check for failing tests: `grep "^not ok" /tmp/test-output.txt`
    - If ANY tests fail: STOP immediately and inform the user
    - Only proceed if ALL tests pass
 
-4. Analyze changes and draft concise commit message following this repo's style:
-   - Look at `git log -10 --oneline` to match existing style
-   - Be factual and direct (e.g., "Fix BATS dist test to create its own distribution")
-   - Focus on "why" when it adds value, otherwise just describe "what"
-   - List items in roughly decreasing order of impact
-   - Keep related items grouped together
-   - **In commit messages**: Wrap all code references in backticks - filenames, paths, commands, function names, variables, make targets, etc.
-     - **CRITICAL**: Anything with markdown special characters (especially underscores `_`, but also `*`, `#`, etc.) MUST be wrapped in backticks
-     - Examples: `helpers.bash`, `make test-recursion`, `setup_sequential_test()`, `TEST_REPO`, `.envs/`, `01-meta.bats`, `make_results.sh`
-     - Prevents markdown parsing issues and improves clarity
+3. Analyze changes in BOTH repositories and draft commit messages for BOTH:
 
-5. **PRESENT the proposed commit message to the user and WAIT for approval before proceeding**
+   For pgxntool:
+   - Analyze: `git status`, `git diff --stat`, `git log -10 --oneline`
+   - Draft message with structure:
+     ```
+     Subject line
 
-6. After receiving approval, stage changes appropriately using `git add`
+     [Main changes in pgxntool...]
 
-7. **VERIFY staged files with `git status`**:
-   - If user did NOT specify a subset: Confirm ALL modified/untracked files are staged
-   - If user specified only certain files: Confirm ONLY those files are staged
-   - STOP and ask user if staging doesn't match intent
+     Related changes in pgxntool-test:
+     - [RELEVANT test change 1]
+     - [RELEVANT test change 2]
 
-8. After verification, commit using `HEREDOC` format:
-```bash
-git commit -m "$(cat <<'EOF'
-Subject line (imperative mood, < 72 chars)
+     Co-Authored-By: Claude <noreply@anthropic.com>
+     ```
+   - Only mention RELEVANT test changes (1-3 bullets):
+     * ✅ Include: Tests for new features, template updates, user docs
+     * ❌ Exclude: Test refactoring, infrastructure, internal changes
+   - Wrap code references in backticks (e.g., `helpers.bash`, `make test`)
+   - No hash placeholder needed - pgxntool doesn't reference test hash
 
-Additional context if needed, wrapped at 72 characters.
+   For pgxntool-test:
+   - Analyze: `git status`, `git diff --stat`, `git log -10 --oneline`
+   - Draft message with structure:
+     ```
+     Subject line
 
-Co-Authored-By: Claude <noreply@anthropic.com>
-EOF
-)"
-```
+     Add tests/updates for pgxntool commit [PGXNTOOL_COMMIT_HASH] (brief description):
+     - [Key pgxntool change 1]
+     - [Key pgxntool change 2]
 
-9. Run `git status` after commit to verify success
+     [pgxntool-test specific changes...]
 
-10. If pre-commit hook modifies files: Check authorship (`git log -1 --format='%an %ae'`) and branch status, then amend if safe or create new commit
+     Co-Authored-By: Claude <noreply@anthropic.com>
+     ```
+   - Use placeholder `[PGXNTOOL_COMMIT_HASH]`
+   - Include brief summary (2-3 bullets) of pgxntool changes near top
+   - Wrap code references in backticks
+
+   **If only one repo has changes:**
+   Skip the repo with no changes. In the commit message for the repo that has changes,
+   add: "Changes only in [repo]. No related changes in [other repo]." before Co-Authored-By.
+
+4. **PRESENT both proposed commit messages to the user and WAIT for approval**
+
+   Show both messages:
+   ```
+   ## Proposed Commit for pgxntool:
+   [message]
+
+   ## Proposed Commit for pgxntool-test:
+   [message with [PGXNTOOL_COMMIT_HASH] placeholder]
+   ```
+
+   **Note:** Mention any files that are intentionally not being committed and why.
+
+   **Note:** If only one repo has changes, show only that message (with note about other repo).
+
+5. **After receiving approval, execute two-phase commit:**
+
+   **Phase 1: Commit pgxntool**
+
+   a. `cd ../pgxntool`
+
+   b. Stage changes: `git add` (include ALL new files per guidelines below)
+      - Check `git status` for untracked files
+      - ALL untracked files that are part of the feature/change MUST be staged
+      - New scripts, new documentation, new helper files, etc. should all be included
+      - Do NOT leave new files uncommitted unless explicitly told to exclude them
+
+   c. Verify staged files: `git status`
+      - Confirm ALL modified AND untracked files are staged
+      - STOP and ask user if staging doesn't match intent
+
+   d. Commit using approved message:
+      ```bash
+      git commit -m "$(cat <<'EOF'
+      [approved pgxntool message]
+      EOF
+      )"
+      ```
+
+   e. Capture hash: `PGXNTOOL_HASH=$(git log -1 --format=%h)`
+
+   f. Verify: `git status`
+
+   g. Handle pre-commit hooks if needed:
+      - Check if hooks modified files
+      - Check authorship: `git log -1 --format='%an %ae'`
+      - Check branch status
+      - Amend if safe or create new commit
+
+   **Phase 2: Commit pgxntool-test**
+
+   a. `cd ../pgxntool-test`
+
+   b. Replace `[PGXNTOOL_COMMIT_HASH]` in approved message with `$PGXNTOOL_HASH`
+      - Keep everything else EXACTLY the same
+
+   c. Stage changes: `git add` (include ALL new files)
+
+   d. Verify staged files: `git status`
+
+   e. Commit using hash-injected message:
+      ```bash
+      git commit -m "$(cat <<'EOF'
+      [approved message with actual pgxntool hash]
+      EOF
+      )"
+      ```
+
+   f. Capture hash: `TEST_HASH=$(git log -1 --format=%h)`
+
+   g. Verify: `git status`
+
+   h. Handle pre-commit hooks if needed
+
+   **Note:** If only one repo has changes, skip the phase for the other repo.
+
+**MULTI-REPO COMMIT CONTEXT:**
+
+**CRITICAL**: Work on pgxntool frequently involves changes across both repositories simultaneously:
+- **pgxntool** (this repo) - The main framework
+- **pgxntool-test** (at `../pgxntool-test/`) - Test harness (includes template files in `template/` directory)
+
+**This is why you MUST check both repositories at the start** (see FIRST step above).
+
+**DEFAULT BEHAVIOR: Commit ALL repos with changes together** - If both repos have changes when you check them, you should plan to commit BOTH repos (unless user explicitly specifies otherwise). This keeps related changes synchronized. **Do NOT create empty commits** - only commit repos with actual modified/untracked files.
+
+When committing changes that span repositories:
+
+1. **pgxntool-test commit MUST reference pgxntool commit hash**
+
+   pgxntool commit format:
+   ```
+   Subject line
+
+   [Main changes...]
+
+   Related changes in pgxntool-test:
+   - [RELEVANT test change]
+   - [Keep to 1-3 bullets]
+
+   Co-Authored-By: Claude <noreply@anthropic.com>
+   ```
+
+   pgxntool-test commit format:
+   ```
+   Subject line
+
+   Add tests for pgxntool commit def5678 (brief description):
+   - [Key pgxntool change 1]
+   - [Key pgxntool change 2]
+
+   [pgxntool-test specific changes...]
+
+   Co-Authored-By: Claude <noreply@anthropic.com>
+   ```
+
+2. **Relevance filter for pgxntool message:**
+   - ✅ Include: Tests for new features, template updates, user documentation
+   - ❌ Exclude: Test refactoring, infrastructure changes, internal improvements
+   - Keep it brief (1-3 bullets max)
+
+3. **Commit workflow:**
+   - Commit pgxntool first (no placeholder)
+   - Capture pgxntool hash
+   - Commit pgxntool-test (inject pgxntool hash)
+   - Result: pgxntool-test references pgxntool commit
+
+4. **Single-repo case:**
+   Add line: "Changes only in [repo]. No related changes in [other repo]."
 
 **REPOSITORY CONTEXT:**
 
-- **pgxntool**: The PostgreSQL extension build framework
-- **pgxntool-test**: Test harness for validating pgxntool
-- **pgxntool-test-template**: Template extension for testing
-
-Key facts:
-- Tests live in `tests/` directory (pgxntool-test)
-- `.envs/` contains test environments (gitignored in pgxntool-test)
+This is pgxntool, a PostgreSQL extension build framework. Key facts:
+- Main Makefile is `base.mk`
+- Scripts live in root directory
+- Documentation is in `README.asc` (generates `README.html`)
 
 **RESTRICTIONS:**
 - DO NOT push unless explicitly asked

@@ -1,9 +1,5 @@
 {
   "permissions": {
-    "additionalDirectories": [
-      "../pgxntool/",
-      "../pgxntool-test-template/"
-    ],
     "allow": [
       "Bash(tee:*)",
       "Bash(make test-bats)",
@@ -19,7 +15,11 @@
       "Bash(DEBUG=4 test/bats/bin/bats:*)",
       "Bash(DEBUG=5 test/bats/bin/bats:*)",
       "Bash(rm -rf .envs)",
-      "Bash(rm -rf .envs/)"
+      "Bash(rm -rf .envs/)",
+      "Edit"
+    ],
+    "additionalDirectories": [
+      "../pgxntool/"
     ]
   }
 }

@@ -1,8 +1,8 @@
 ---
-description: Create worktrees for all three pgxntool repos
+description: Create worktrees for both pgxntool repos
 ---
 
-Create git worktrees for pgxntool, pgxntool-test, and pgxntool-test-template using the script in bin/create-worktree.sh.
+Create git worktrees for pgxntool and pgxntool-test using the script in bin/create-worktree.sh.
 
 Ask the user for the worktree name if they haven't provided one, then execute:
 
@@ -13,6 +13,5 @@ bin/create-worktree.sh <worktree-name>
 The worktrees will be created in ../worktrees/<worktree-name>/ with subdirectories for each repo:
 - pgxntool/
 - pgxntool-test/
-- pgxntool-test-template/
 
 This maintains the directory structure that the test harness expects.

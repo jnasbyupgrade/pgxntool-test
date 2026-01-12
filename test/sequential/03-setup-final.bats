@@ -5,7 +5,7 @@
 # Tests that setup.sh can be run multiple times safely and that
 # template files can be copied to their final locations
 
-load helpers
+load ../lib/helpers
 
 setup_file() {
   debug 1 ">>> ENTER setup_file: 03-setup-final (PID=$$)"
