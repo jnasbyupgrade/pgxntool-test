@@ -8,12 +8,11 @@
 # - verify-results can be disabled via PGXNTOOL_ENABLE_VERIFY_RESULTS
 # - verify-results has no dependencies (doesn't run tests itself)
 
-load helpers
+load ../lib/helpers
 
 setup_file() {
   # Set TOPDIR
-  cd "$BATS_TEST_DIRNAME/.."
-  export TOPDIR=$(pwd)
+  setup_topdir
 
   # Independent test - gets its own isolated environment with foundation TEST_REPO
   load_test_env "verify-results"

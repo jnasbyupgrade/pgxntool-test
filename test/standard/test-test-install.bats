@@ -8,12 +8,11 @@
 # - test/install can be disabled via PGXNTOOL_ENABLE_TEST_INSTALL
 # - Execution order is preserved via schedule file
 
-load helpers
+load ../lib/helpers
 
 setup_file() {
   # Set TOPDIR
-  cd "$BATS_TEST_DIRNAME/.."
-  export TOPDIR=$(pwd)
+  setup_topdir
 
   # Independent test - gets its own isolated environment with foundation TEST_REPO
   load_test_env "test-install"

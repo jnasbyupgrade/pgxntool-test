@@ -7,12 +7,11 @@
 # - test-build can be disabled via PGXNTOOL_ENABLE_TEST_BUILD
 # - test-build runs before regular tests when enabled
 
-load helpers
+load ../lib/helpers
 
 setup_file() {
   # Set TOPDIR
-  cd "$BATS_TEST_DIRNAME/.."
-  export TOPDIR=$(pwd)
+  setup_topdir
 
   # Independent test - gets its own isolated environment with foundation TEST_REPO
   load_test_env "test-build"
