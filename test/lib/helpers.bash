@@ -28,19 +28,19 @@ load ../lib/assertions
 # Set TOPDIR to the repository root
 # This function should be called in setup_file() before using TOPDIR
 # It works from any test file location (test/standard/, test/sequential/, test/lib/, etc.)
+# Supports both regular git repositories (.git directory) and git worktrees (.git file)
 setup_topdir() {
   if [ -z "$TOPDIR" ]; then
-    # Try to find repo root by looking for .git directory
+    # Try to find repo root by looking for .git (directory or file for worktrees)
     local dir="${BATS_TEST_DIRNAME:-.}"
-    while [ "$dir" != "/" ] && [ ! -d "$dir/.git" ]; do
+    while [ "$dir" != "/" ] && [ ! -e "$dir/.git" ]; do
       dir=$(dirname "$dir")
     done
-    if [ -d "$dir/.git" ]; then
+    if [ -e "$dir/.git" ]; then
       export TOPDIR="$dir"
     else
-      # Fallback: go up from test directory (test/standard -> test -> repo root)
-      cd "$BATS_TEST_DIRNAME/../.." 2>/dev/null || cd "$BATS_TEST_DIRNAME/.." 2>/dev/null || cd .
-      export TOPDIR=$(pwd)
+      error "Cannot determine TOPDIR: no .git found from ${BATS_TEST_DIRNAME}. Tests must be run from within the repository."
+      return 1
     fi
   fi
 }

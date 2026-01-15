@@ -42,6 +42,17 @@ setup_file() {
   # Set TOPDIR to repository root
   setup_topdir
 
+  # Check if foundation already exists and needs cleaning
+  local foundation_dir="$TOPDIR/.envs/foundation"
+  local foundation_complete="$foundation_dir/.bats-state/.foundation-complete"
+
+  if [ -f "$foundation_complete" ]; then
+    debug 2 "Foundation already exists, cleaning for fresh rebuild"
+    # Foundation exists - clean it to start fresh
+    # This matches sequential test behavior where tests are self-healing
+    clean_env "foundation" || return 1
+  fi
+
   # Foundation always runs in "foundation" environment
   load_test_env "foundation" || return 1
 
@@ -214,6 +225,31 @@ In a real extension, these would already exist before adding pgxntool."
   # pgxntool should not exist yet - if it does, environment cleanup failed
   [ ! -d "pgxntool" ]
 
+  # CRITICAL: git subtree add requires a completely clean working tree.
+  # The command internally uses 'git diff-index --quiet HEAD' which can fail due to
+  # filesystem timestamp granularity causing stale index cache entries.
+  # See: https://git-scm.com/docs/git-status#_background_refresh
+  #
+  # Solution: Wait for filesystem timestamps to settle, then refresh git index cache
+  # to ensure accurate status reporting before git subtree add.
+
+  sleep 1  # Wait for filesystem timestamp granularity
+
+  run git update-index --refresh
+  assert_success
+
+  run git status --porcelain
+  assert_success
+
+  if [ -n "$output" ]; then
+    out "ERROR: Working tree must be clean for git subtree add:"
+    out "$output"
+    run git diff-index HEAD  # Show what git subtree will see
+    out "Files with index mismatches:"
+    out "$output"
+    error "Working tree has modifications, cannot proceed with git subtree add"
+  fi
+
   # Validate prerequisites before attempting git subtree
   # 1. Check PGXNREPO is accessible and safe
   if [ ! -d "$PGXNREPO/.git" ]; then
@@ -257,12 +293,18 @@ In a real extension, these would already exist before adding pgxntool."
       out "Source repo is dirty and on correct branch, using rsync instead of git subtree"
 
       # Rsync files from source (git doesn't track empty directories, so do this first)
-      mkdir pgxntool
-      rsync -a "$PGXNREPO/" pgxntool/ --exclude=.git
+      run mkdir pgxntool
+      assert_success
+
+      run rsync -a "$PGXNREPO/" pgxntool/ --exclude=.git
+      assert_success
 
       # Commit all files at once
-      git add --all
-      git commit -m "Committing unsaved pgxntool changes"
+      run git add --all
+      assert_success
+
+      run git commit -m "Committing unsaved pgxntool changes"
+      assert_success
     fi
   fi
 

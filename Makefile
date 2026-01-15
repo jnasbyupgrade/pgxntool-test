@@ -55,7 +55,7 @@ endif
 	@test/bats/bin/bats test/lib/foundation.bats
 
 # Run standard tests - sequential tests in order, then standard independent tests
-# Excludes optional/extra tests (e.g., test-pgtle-versions.bats) which are only run in test-all or test-extra
+# Excludes optional/extra tests (e.g., test-pgtle-versions.bats) which are only run in test-extra
 #
 # Note: We explicitly list all sequential tests rather than just running the last one
 # because BATS only outputs TAP results for the test files directly invoked.
@@ -65,19 +65,14 @@ endif
 test: test-setup
 	@test/bats/bin/bats $(SEQUENTIAL_TESTS) $(STANDARD_TESTS)
 
-# Run ALL tests including optional/extra tests
-# This is simply the combination of test and test-extra
-.PHONY: test-all
-test-all: test test-extra
-
-# Run ONLY extra/optional tests (e.g., test-pgtle-versions.bats)
-# These are tests that are excluded from the standard test suite but can be run separately
+# Run regular test suite PLUS extra/optional tests (e.g., test-pgtle-versions.bats)
+# This passes all test files to bats in a single invocation for proper TAP output
 .PHONY: test-extra
 test-extra: test-setup
 ifneq ($(EXTRA_TESTS),)
-	@test/bats/bin/bats $(EXTRA_TESTS)
+	@test/bats/bin/bats $(SEQUENTIAL_TESTS) $(STANDARD_TESTS) $(EXTRA_TESTS)
 else
-	@echo "No extra tests found"
+	@test/bats/bin/bats $(SEQUENTIAL_TESTS) $(STANDARD_TESTS)
 endif
 
 # Clean test environments
