@@ -2,24 +2,33 @@
 
 Test harness for [pgxntool](https://github.com/decibel/pgxntool), a PostgreSQL extension build framework.
 
+## Repository Structure
+
+**IMPORTANT**: This repository must be cloned in the same directory as pgxntool, so that `../pgxntool` exists. The test harness expects this directory layout:
+
+```
+parent-directory/
+├── pgxntool/          # The framework being tested
+└── pgxntool-test/     # This repository (test harness)
+```
+
+The tests use relative paths to access pgxntool, so maintaining this structure is required.
+
 ## Requirements
 
 - PostgreSQL with development headers
-- [BATS (Bash Automated Testing System)](https://github.com/bats-core/bats-core)
 - rsync
 - asciidoctor (for documentation tests)
 
-### Installing BATS
+BATS (Bash Automated Testing System) is included as a git submodule at `test/bats/`.
 
-```bash
-# macOS
-brew install bats-core
+### PostgreSQL Configuration
 
-# Linux (via git)
-git clone https://github.com/bats-core/bats-core.git
-cd bats-core
-sudo ./install.sh /usr/local
-```
+Tests that require PostgreSQL assume a plain `psql` command works. Set the appropriate environment variables:
+
+- `PGHOST`, `PGPORT`, `PGUSER`, `PGDATABASE`, `PGPASSWORD` (or use `~/.pgpass`)
+
+If not set, `psql` uses defaults (Unix socket, database matching username). Tests skip if PostgreSQL is not accessible.
 
 ## Running Tests
 
@@ -59,8 +68,8 @@ This catches infrastructure bugs early - if test-recursion fails, you know the t
 ## How Tests Work
 
 This test harness validates pgxntool by:
-1. Cloning pgxntool-test-template (a minimal PostgreSQL extension)
-2. Injecting pgxntool into it via git subtree
+1. Creating a fresh git repo with extension files from `template/`
+2. Adding pgxntool via git subtree
 3. Running various pgxntool operations (setup, build, test, dist)
 4. Validating the results
 
@@ -71,13 +80,13 @@ See [CLAUDE.md](CLAUDE.md) for detailed documentation.
 Tests are organized by filename pattern:
 
 **Foundation Layer:**
-- **foundation.bats** - Creates base TEST_REPO (clone + setup.sh + template files)
+- **foundation.bats** - Creates base TEST_REPO (git init + template files + pgxntool subtree + setup.sh)
 - Run automatically by other tests, not directly
 
 **Sequential Tests (Pattern: `[0-9][0-9]-*.bats`):**
 - Run in numeric order, each building on previous test's work
 - Examples: 00-validate-tests, 01-meta, 02-dist, 03-setup-final
-- Share state in `.envs/sequential/` environment
+- Share state in `test/.envs/sequential/` environment
 
 **Independent Tests (Pattern: `test-*.bats`):**
 - Each gets its own isolated environment

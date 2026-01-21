@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# Script to create worktrees for pgxntool, pgxntool-test, and pgxntool-test-template
+# Script to create worktrees for pgxntool and pgxntool-test
 # Usage: ./create-worktree.sh <worktree-name>
 
 if [ $# -ne 1 ]; then
@@ -34,13 +34,8 @@ echo "Creating pgxntool-test worktree..."
 cd "$SCRIPT_DIR/.."
 git worktree add "$WORKTREE_DIR/pgxntool-test"
 
-echo "Creating pgxntool-test-template worktree..."
-cd "$SCRIPT_DIR/../../pgxntool-test-template"
-git worktree add "$WORKTREE_DIR/pgxntool-test-template"
-
-echo ""
+echo
 echo "Worktrees created successfully in:"
 echo "  $WORKTREE_DIR/"
 echo "    ├── pgxntool/"
-echo "    ├── pgxntool-test/"
-echo "    └── pgxntool-test-template/"
+echo "    └── pgxntool-test/"
