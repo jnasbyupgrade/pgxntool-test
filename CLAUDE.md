@@ -110,13 +110,13 @@ Tests use BATS (Bash Automated Testing System) with semantic assertions that che
 
 ### Test Environment Setup
 
-Tests create isolated environments in `.envs/` directory:
+Tests create isolated environments in `test/.envs/` directory:
 - **Sequential environment**: Shared by 01-05 tests, built incrementally
 - **Non-sequential environments**: Fresh copies for test-make-test, test-make-results, test-doc
 
 **Environment variables** (from setup functions in tests/helpers.bash):
 - `TOPDIR` - pgxntool-test repo root
-- `TEST_DIR` - Environment-specific workspace (.envs/sequential/, .envs/doc/, etc.)
+- `TEST_DIR` - Environment-specific workspace (test/.envs/sequential/, test/.envs/doc/, etc.)
 - `TEST_REPO` - Test project location (`$TEST_DIR/repo`)
 - `PGXNREPO` - Location of pgxntool (defaults to `../pgxntool`)
 - `PGXNBRANCH` - Branch to use (defaults to `master`)
@@ -133,7 +133,7 @@ Tests are organized by filename patterns:
 **Sequential Tests (Pattern: `[0-9][0-9]-*.bats`):**
 - Run in numeric order, each building on previous test's work
 - Examples: 00-validate-tests, 01-meta, 02-dist, 03-setup-final
-- Share state in `.envs/sequential/` environment
+- Share state in `test/.envs/sequential/` environment
 
 **Independent Tests (Pattern: `test-*.bats`):**
 - Each gets its own isolated environment
@@ -162,7 +162,7 @@ test/bats/bin/bats tests/03-setup-final.bats
 
 ### CRITICAL: Test Environment Isolation
 
-**DO NOT run tests in parallel!** Test runs share the same `.envs/` directory and will clobber each other.
+**DO NOT run tests in parallel!** Test runs share the same `test/.envs/` directory and will clobber each other.
 
 **Examples of what NOT to do:**
 - Running `make test` while a test agent is running tests
@@ -170,7 +170,7 @@ test/bats/bin/bats tests/03-setup-final.bats
 - Having the main thread run tests while a subagent is also running tests
 
 **Why this matters:**
-- Tests create and modify shared state in `.envs/sequential/`, `.envs/foundation/`, etc.
+- Tests create and modify shared state in `test/.envs/sequential/`, `test/.envs/foundation/`, etc.
 - Parallel test runs will corrupt each other's environments
 - Results will be unpredictable and incorrect
 
@@ -220,7 +220,7 @@ pgxntool-test/
 │   ├── README.pids.md        # PID safety mechanism documentation
 │   └── TODO.md               # Future improvements
 ├── test/bats/                # BATS framework (git submodule)
-└── .envs/                    # Test environments (gitignored)
+└── test/.envs/               # Test environments (gitignored)
 ```
 
 ## Test System
@@ -311,6 +311,6 @@ test/bats/bin/bats tests/02-dist.bats
 
 - **../pgxntool/** - The framework being tested
 - **../pgxntool-test-template/** - The minimal extension used as test subject
-- You should never have to run rm -rf .envs; the test system should always know how to handle .envs
+- You should never have to run rm -rf test/.envs; the test system should always know how to handle test/.envs
 - do not hard code things that can be determined in other ways. For example, if we need to do something to a subset of files, look for ways to list the files that meet the specification
 - when documenting things avoid refering to the past, unless it's a major change. People generally don't need to know about what *was*, they only care about what we have now

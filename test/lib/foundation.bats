@@ -43,7 +43,7 @@ setup_file() {
   setup_topdir
 
   # Check if foundation already exists and needs cleaning
-  local foundation_dir="$TOPDIR/.envs/foundation"
+  local foundation_dir="$TOPDIR/test/.envs/foundation"
   local foundation_complete="$foundation_dir/.bats-state/.foundation-complete"
 
   if [ -f "$foundation_complete" ]; then

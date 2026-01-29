@@ -14,7 +14,7 @@ The BATS test system uses **semantic assertions** instead of string-based output
 
 **Characteristics**:
 - Run in numerical order (00, 01, 02, ...)
-- Share a single test environment (`.envs/sequential/`)
+- Share a single test environment (`test/.envs/sequential/`)
 - Build state incrementally (each test depends on previous)
 - Use state markers to track execution
 - Detect environment pollution
@@ -34,7 +34,7 @@ The BATS test system uses **semantic assertions** instead of string-based output
 
 **Characteristics**:
 - Run in isolation with fresh environments
-- Each test gets its own environment (`.envs/doc/`, `.envs/results/`)
+- Each test gets its own environment (`test/.envs/doc/`, `test/.envs/results/`)
 - Can run in parallel (no shared state)
 - Rebuild prerequisites from scratch each time
 - No pollution detection needed
@@ -51,7 +51,7 @@ The BATS test system uses **semantic assertions** instead of string-based output
 
 ### State Markers
 
-Sequential tests use marker files and lock directories in `.envs/<env>/.bats-state/`:
+Sequential tests use marker files and lock directories in `test/.envs/<env>/.bats-state/`:
 
 1. **`.start-<test-name>`** - Test has started
 2. **`.complete-<test-name>`** - Test has completed successfully
@@ -59,7 +59,7 @@ Sequential tests use marker files and lock directories in `.envs/<env>/.bats-sta
 
 **Example state after running 01-03**:
 ```
-.envs/sequential/.bats-state/
+test/.envs/sequential/.bats-state/
 ├── .start-01-clone
 ├── .complete-01-clone
 ├── .start-02-setup
@@ -193,7 +193,7 @@ Creates a new test environment.
 
 **What it does**:
 1. Calls `clean_env` to safely remove existing environment
-2. Creates directory structure: `.envs/<env-name>/.bats-state/`
+2. Creates directory structure: `test/.envs/<env-name>/.bats-state/`
 3. Writes `.env` file with TEST_DIR, TEST_REPO, etc.
 
 ### State Marker Functions
@@ -329,7 +329,7 @@ DEBUG=5 test/bats/bin/bats tests/02-setup.bats  # Verbose debug
 
 ### Clean Environments
 ```bash
-rm -rf .envs/  # Remove all test environments
+rm -rf test/.envs/  # Remove all test environments
 ```
 
 ## Test Development Tips
@@ -401,14 +401,14 @@ teardown_file() {
 
 ### Check State Markers
 ```bash
-ls -la .envs/sequential/.bats-state/
+ls -la test/.envs/sequential/.bats-state/
 # Shows which tests started/completed and any PID files
 ```
 
 ### Inspect Test Environment
 ```bash
 # After test failure, inspect the environment
-cd .envs/sequential/repo
+cd test/.envs/sequential/repo
 git status
 ls -la
 cat META.json
@@ -422,7 +422,7 @@ DEBUG=5 test/bats/bin/bats tests/02-setup.bats
 ### Check for Pollution
 ```bash
 # Look for incomplete tests
-cd .envs/sequential/.bats-state
+cd test/.envs/sequential/.bats-state
 for start in .start-*; do
   test=$(echo $start | sed 's/^.start-//')
   if [ ! -f ".complete-$test" ]; then
@@ -434,7 +434,7 @@ done
 ### Check for Running Tests
 ```bash
 # Look for active PID files
-cd .envs/sequential/.bats-state
+cd test/.envs/sequential/.bats-state
 for pidfile in .pid-*; do
   [ -f "$pidfile" ] || continue
   pid=$(cat "$pidfile")
@@ -470,7 +470,7 @@ The test includes a comment explaining this:
 
 **Fix**: Clean environments and re-run:
 ```bash
-rm -rf .envs/
+rm -rf test/.envs/
 test/bats/bin/bats tests/01-clone.bats
 ```
 

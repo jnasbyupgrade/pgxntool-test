@@ -10,14 +10,14 @@ The test system has three layers based on filename patterns:
 
 **Foundation (foundation.bats)**:
 - Creates the base TEST_REPO (git init + copy template files + pgxntool subtree + setup.sh)
-- Runs in `.envs/foundation/` environment
+- Runs in `test/.envs/foundation/` environment
 - All other tests depend on this
 - Built once, then copied to other environments for speed
 
 **Sequential Tests (Pattern: `[0-9][0-9]-*.bats`)**:
 - Tests numbered 00-99 (e.g., 00-validate-tests.bats, 01-meta.bats, 02-dist.bats)
 - Run in numeric order, each building on previous test's work
-- Share state in `.envs/sequential/` environment
+- Share state in `test/.envs/sequential/` environment
 - Each test **assumes** previous tests completed successfully
 - Example: 02-dist.bats expects META.json to exist from 01-meta.bats
 
@@ -755,12 +755,12 @@ setup() {
 **Diagnosis**:
 ```bash
 # Check state markers
-ls -la .envs/sequential/.bats-state/
+ls -la test/.envs/sequential/.bats-state/
 
 # Look for incomplete tests
-for f in .envs/sequential/.bats-state/.start-*; do
+for f in test/.envs/sequential/.bats-state/.start-*; do
   test=$(basename "$f" | sed 's/^.start-//')
-  if [ ! -f ".envs/sequential/.bats-state/.complete-$test" ]; then
+  if [ ! -f "test/.envs/sequential/.bats-state/.complete-$test" ]; then
     echo "Incomplete: $test"
   fi
 done
@@ -774,7 +774,7 @@ done
 **Fix**:
 ```bash
 # Clean and try again
-rm -rf .envs/
+rm -rf test/.envs/
 test/bats/bin/bats tests/foundation.bats
 ```
 
@@ -824,7 +824,7 @@ test/bats/bin/bats tests/02-dist.bats
 DEBUG=5 test/bats/bin/bats tests/foundation.bats
 
 # Check what detect_dirty_state sees
-cd .envs/sequential/.bats-state
+cd test/.envs/sequential/.bats-state
 ls -la
 ```
 
@@ -986,7 +986,7 @@ Before committing changes to test system:
 
 ```bash
 # 1. Clean full run
-rm -rf .envs/
+rm -rf test/.envs/
 for test in tests/0*.bats; do
   test/bats/bin/bats "$test" || exit 1
 done
@@ -997,7 +997,7 @@ for test in tests/0*.bats; do
 done
 
 # 3. Partial rerun (should detect pollution)
-rm -rf .envs/
+rm -rf test/.envs/
 test/bats/bin/bats tests/foundation.bats
 test/bats/bin/bats tests/foundation.bats
 test/bats/bin/bats tests/01-meta.bats
@@ -1005,14 +1005,14 @@ test/bats/bin/bats tests/01-meta.bats
 test/bats/bin/bats tests/foundation.bats
 
 # 4. Individual test (should auto-run prerequisites)
-rm -rf .envs/
+rm -rf test/.envs/
 test/bats/bin/bats tests/02-dist.bats
 ```
 
 ### Debug Checklist
 
 When test fails:
-1. [ ] Check state markers: `ls -la .envs/sequential/.bats-state/`
+1. [ ] Check state markers: `ls -la test/.envs/sequential/.bats-state/`
 2. [ ] Check PID files: Any stale? Any actually running?
 3. [ ] Check test environment: Does TEST_REPO exist? Contains expected files?
 4. [ ] Run with debug: `DEBUG=5 test/bats/bin/bats tests/XX-test.bats`

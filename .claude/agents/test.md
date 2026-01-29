@@ -30,7 +30,7 @@ DEBUG=5 test/bats/bin/bats tests/04-pgtle.bats  # For investigation
 
 ## 🚨 CRITICAL: No Parallel Test Runs
 
-**Tests share `.envs/` directory and will corrupt each other if run in parallel.**
+**Tests share `test/.envs/` directory and will corrupt each other if run in parallel.**
 
 Before running ANY test command:
 1. Check if another test run is in progress
@@ -132,14 +132,14 @@ assert_success
 Tests use **BATS (Bash Automated Testing System)** in three categories:
 
 1. **Foundation** (`foundation.bats`) - Creates base TEST_REPO that all tests depend on
-2. **Sequential Tests** (`[0-9][0-9]-*.bats`) - Run in numeric order, share `.envs/sequential/`
-3. **Independent Tests** (`test-*.bats`) - Isolated, each gets its own `.envs/{test-name}/`
+2. **Sequential Tests** (`[0-9][0-9]-*.bats`) - Run in numeric order, share `test/.envs/sequential/`
+3. **Independent Tests** (`test-*.bats`) - Isolated, each gets its own `test/.envs/{test-name}/`
 
 **Foundation rebuilding**: `make test` always regenerates foundation (via `clean-envs`). Individual tests also auto-rebuild via `ensure_foundation()`.
 
 ### State Management
 
-Sequential tests use markers in `.envs/sequential/.bats-state/`:
+Sequential tests use markers in `test/.envs/sequential/.bats-state/`:
 - `.start-<test-name>` - Test started
 - `.complete-<test-name>` - Test completed successfully
 - `.lock-<test-name>/` - Lock directory with `pid` file
@@ -186,7 +186,7 @@ test/bats/bin/bats --verbose tests/01-meta.bats  # BATS verbose mode
 Tests set these automatically (from `tests/helpers.bash`):
 
 - `TOPDIR` - pgxntool-test repo root
-- `TEST_DIR` - Environment workspace (`.envs/sequential/`, etc.)
+- `TEST_DIR` - Environment workspace (`test/.envs/sequential/`, etc.)
 - `TEST_REPO` - Test project location (`$TEST_DIR/repo`)
 - `PGXNREPO` - Location of pgxntool (defaults to `../pgxntool`)
 - `PGXNBRANCH` - Branch to use (defaults to `master`)
@@ -238,8 +238,8 @@ test/bats/bin/bats tests/04-pgtle.bats  # Auto-rebuilds foundation via ensure_fo
 
 1. Read test output (which assertion failed?)
 2. Use DEBUG mode: `DEBUG=5 test/bats/bin/bats tests/test-name.bats`
-3. Inspect environment: `cd .envs/sequential/repo && ls -la`
-4. Check state markers: `ls .envs/sequential/.bats-state/`
+3. Inspect environment: `cd test/.envs/sequential/repo && ls -la`
+4. Check state markers: `ls test/.envs/sequential/.bats-state/`
 5. **Work top-down**: Fix earliest failure first (downstream failures often cascade)
 
 ---
@@ -272,8 +272,8 @@ DEBUG=5 test/bats/bin/bats tests/04-pgtle.bats
 make test-recursion
 
 # Inspect environment
-cd .envs/sequential/repo
-ls .envs/sequential/.bats-state/
+cd test/.envs/sequential/repo
+ls test/.envs/sequential/.bats-state/
 
 # ❌ NEVER in normal operation:
 # make clean-envs  # Only for debugging cleanup failures
@@ -287,6 +287,6 @@ ls .envs/sequential/.bats-state/
 2. **Trust Environment State**: Tests don't redundantly verify setup - expose bugs, don't work around them
 3. **Fail Fast**: Infrastructure should fail with clear messages, not guess silently
 4. **Debug Top-Down**: Fix earliest failure first - downstream failures often cascade
-5. **No Parallel Runs**: Tests share `.envs/` and will corrupt each other
+5. **No Parallel Runs**: Tests share `test/.envs/` and will corrupt each other
 
 **For detailed test development guidance, see `tests/CLAUDE.md`.**
