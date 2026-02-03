@@ -59,7 +59,7 @@ Sequential tests use marker files and lock directories in `test/.envs/<env>/.bat
 
 **Example state after running 01-03**:
 ```
-test/.envs/sequential/.bats-state/
+.envs/sequential/.bats-state/
 ├── .start-01-clone
 ├── .complete-01-clone
 ├── .start-02-setup
@@ -329,7 +329,7 @@ DEBUG=5 test/bats/bin/bats tests/02-setup.bats  # Verbose debug
 
 ### Clean Environments
 ```bash
-rm -rf test/.envs/  # Remove all test environments
+rm -rf .envs/  # Remove all test environments
 ```
 
 ## Test Development Tips
@@ -401,14 +401,14 @@ teardown_file() {
 
 ### Check State Markers
 ```bash
-ls -la test/.envs/sequential/.bats-state/
+ls -la .envs/sequential/.bats-state/
 # Shows which tests started/completed and any PID files
 ```
 
 ### Inspect Test Environment
 ```bash
 # After test failure, inspect the environment
-cd test/.envs/sequential/repo
+cd .envs/sequential/repo
 git status
 ls -la
 cat META.json
@@ -422,7 +422,7 @@ DEBUG=5 test/bats/bin/bats tests/02-setup.bats
 ### Check for Pollution
 ```bash
 # Look for incomplete tests
-cd test/.envs/sequential/.bats-state
+cd .envs/sequential/.bats-state
 for start in .start-*; do
   test=$(echo $start | sed 's/^.start-//')
   if [ ! -f ".complete-$test" ]; then
@@ -434,7 +434,7 @@ done
 ### Check for Running Tests
 ```bash
 # Look for active PID files
-cd test/.envs/sequential/.bats-state
+cd .envs/sequential/.bats-state
 for pidfile in .pid-*; do
   [ -f "$pidfile" ] || continue
   pid=$(cat "$pidfile")
@@ -470,7 +470,7 @@ The test includes a comment explaining this:
 
 **Fix**: Clean environments and re-run:
 ```bash
-rm -rf test/.envs/
+rm -rf .envs/
 test/bats/bin/bats tests/01-clone.bats
 ```
 

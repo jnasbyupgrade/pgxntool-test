@@ -93,16 +93,9 @@ setup() {
 }
 
 @test "make results updates expected output" {
-  # The previous test modified expected output, causing tests to fail
-  # Run make results to fix the expected output by copying from results
-  # We need to disable verify-results because tests are currently failing
-  PGXNTOOL_ENABLE_VERIFY_RESULTS=no run make results
-  if [ "$status" -ne 0 ]; then
-    echo "make results failed with status $status"
-    echo "Output: $output"
-    echo "Checking make test status:"
-    make test 2>&1 | tail -10 || true
-  fi
+  # Run make results to fix the expected output
+  # Disable verify-results since we intentionally created a mismatch to test this
+  run make PGXNTOOL_ENABLE_VERIFY_RESULTS=no results
   assert_success
 }
 

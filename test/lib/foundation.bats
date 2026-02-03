@@ -43,7 +43,7 @@ setup_file() {
   setup_topdir
 
   # Check if foundation already exists and needs cleaning
-  local foundation_dir="$TOPDIR/test/.envs/foundation"
+  local foundation_dir="$TOPDIR/.envs/foundation"
   local foundation_complete="$foundation_dir/.bats-state/.foundation-complete"
 
   if [ -f "$foundation_complete" ]; then
@@ -145,7 +145,7 @@ teardown_file() {
   # Template files should be untracked at this point
   run git status --porcelain
   assert_success
-  local untracked=$(echo "$output" | grep "^??" || echo "")
+  local untracked=$(echo "$output" | grep "^??" || echo)
   [ -n "$untracked" ]
 
   # Add all untracked files (extension source files)
@@ -159,15 +159,15 @@ In a real extension, these would already exist before adding pgxntool."
   # Verify commit succeeded (no untracked files remain)
   run git status --porcelain
   assert_success
-  local remaining=$(echo "$output" | grep "^??" || echo "")
+  local remaining=$(echo "$output" | grep "^??" || echo)
   [ -z "$remaining" ]
 }
 
 # CRITICAL: Fake remote is REQUIRED for `make dist` to work.
 #
 # WHY: The `make dist` target (in pgxntool/base.mk) has prerequisite `tag`, which does:
-#   1. git branch $(PGXNVERSION)       - Create branch for version
-#   2. git push --set-upstream origin $(PGXNVERSION)  - Push to remote
+#   1. git tag $(PGXNVERSION)          - Create tag for version
+#   2. git push origin $(PGXNVERSION)  - Push tag to remote
 #
 # Without a remote named "origin", step 2 fails and `make dist` cannot complete.
 #
@@ -252,12 +252,8 @@ In a real extension, these would already exist before adding pgxntool."
 
   # Validate prerequisites before attempting git subtree
   # 1. Check PGXNREPO is accessible and safe
-  # Check if it's a local git repo:
-  # - Regular git repos have .git as a directory
-  # - Git worktrees have .git as a file (pointing to the main repo's .git/worktrees/)
-  # We need to check both cases to support worktrees
-  if [ ! -d "$PGXNREPO/.git" ] && [ ! -f "$PGXNREPO/.git" ]; then
-    # Not a local repo - must be a valid remote URL
+  if [ ! -e "$PGXNREPO/.git" ]; then
+    # Not a local directory - must be a valid remote URL
 
     # Explicitly reject dangerous protocols first
     if echo "$PGXNREPO" | grep -qiE '^(file://|ext::)'; then
@@ -270,25 +266,17 @@ In a real extension, these would already exist before adding pgxntool."
     fi
   fi
 
-  # 2. For local repos (regular or worktree), verify branch exists
-  if [ -d "$PGXNREPO/.git" ] || [ -f "$PGXNREPO/.git" ]; then
+  # 2. For local repos, verify branch exists
+  if [ -e "$PGXNREPO/.git" ]; then
     if ! (cd "$PGXNREPO" && git rev-parse --verify "$PGXNBRANCH" >/dev/null 2>&1); then
       error "Branch $PGXNBRANCH does not exist in $PGXNREPO"
     fi
   fi
 
-  # 3. Check if TEST_REPO has uncommitted changes - if so, use rsync
-  # git subtree add requires a clean working tree
-  local test_repo_is_dirty=0
-  if [ -n "$(git status --porcelain)" ]; then
-    test_repo_is_dirty=1
-    out "TEST_REPO has uncommitted changes, using rsync instead of git subtree"
-  fi
-
-  # 4. Check if source repo is dirty and use rsync if needed
+  # 3. Check if source repo is dirty and use rsync if needed
   # This matches the legacy test behavior in tests/clone
   local source_is_dirty=0
-  if [ -d "$PGXNREPO/.git" ] || [ -f "$PGXNREPO/.git" ]; then
+  if [ -e "$PGXNREPO/.git" ]; then
     # SECURITY: rsync only works with local paths, never remote URLs
     if [[ "$PGXNREPO" == *://* ]]; then
       error "Cannot use rsync with remote URL: $PGXNREPO"
@@ -299,24 +287,29 @@ In a real extension, these would already exist before adding pgxntool."
       local current_branch=$(cd "$PGXNREPO" && git symbolic-ref --short HEAD)
 
       if [ "$current_branch" != "$PGXNBRANCH" ]; then
-        out "Source repo is dirty but on wrong branch ($current_branch, expected $PGXNBRANCH), using rsync instead of git subtree"
-      else
-        out "Source repo is dirty and on correct branch, using rsync instead of git subtree"
+        error "Source repo is dirty but on wrong branch ($current_branch, expected $PGXNBRANCH)"
       fi
+
+      out "Source repo is dirty and on correct branch, using rsync instead of git subtree"
+
+      # Rsync files from source (git doesn't track empty directories, so do this first)
+      run mkdir pgxntool
+      assert_success
+
+      run rsync -a "$PGXNREPO/" pgxntool/ --exclude=.git
+      assert_success
+
+      # Commit all files at once
+      run git add --all
+      assert_success
+
+      run git commit -m "Committing unsaved pgxntool changes"
+      assert_success
     fi
   fi
 
-  # Use rsync if either repo is dirty
-  if [ $test_repo_is_dirty -eq 1 ] || [ $source_is_dirty -eq 1 ]; then
-    # Rsync files from source (git doesn't track empty directories, so do this first)
-    mkdir -p pgxntool
-    rsync -a "$PGXNREPO/" pgxntool/ --exclude=.git
-
-    # Commit all files at once
-    git add --all
-    git commit -m "Add pgxntool via rsync" || true
-  else
-    # Both repos are clean, use git subtree
+  # If source wasn't dirty, use git subtree
+  if [ $source_is_dirty -eq 0 ]; then
     run git subtree add -P pgxntool --squash "$PGXNREPO" "$PGXNBRANCH"
 
     # Capture error output for debugging
@@ -524,13 +517,17 @@ In a real extension, these would already exist before adding pgxntool."
   ! grep -q "EXTENSION_NAME" META.json
 }
 
-@test "commit auto-generated META.json" {
+@test "commit auto-generated files" {
   # Should have changes to META.json at this point (from make regenerating it)
   run git diff --quiet META.json
   assert_failure
 
+  # Add META.json and any auto-generated versioned SQL files
+  # Versioned SQL files (sql/*--*.sql) are generated by make from sql/*.sql
+  # and should be committed per our recommended workflow
   git add META.json
-  git commit -m "Update META.json (auto-generated from META.in.json)"
+  git add sql/*--*.sql 2>/dev/null || true
+  git commit -m "Update auto-generated files (META.json and versioned SQL)"
 }
 
 @test "repository is in valid state after setup" {

@@ -47,9 +47,17 @@ setup_topdir() {
 
 # Output to terminal (always visible)
 # Usage: out "message"
+#        out -f "message"  # flush immediately (for piped output)
 # Outputs to FD 3 which BATS sends directly to terminal
+# The -f flag uses a space+backspace trick to force immediate flushing when piped.
+# See https://stackoverflow.com/questions/68759687 for why this works.
 out() {
-  echo "# $*" >&3
+  local prefix=''
+  if [ "$1" = "-f" ]; then
+    prefix=' \b'
+    shift
+  fi
+  echo -e "$prefix# $*" >&3
 }
 
 # Error message and return failure
@@ -69,7 +77,7 @@ debug() {
   local message="$*"
 
   if [ "${DEBUG:-0}" -ge "$level" ]; then
-    out "DEBUG[$level]: $message"
+    out -f "DEBUG[$level]: $message"
   fi
 }
 
@@ -174,8 +182,79 @@ debug_vars() {
   debug "$level" "$output"
 }
 
+# Check that pgxntool-test and pgxntool are on the same branch
+# This prevents confusing test failures when someone commits to the wrong branch
+# Must be called after TOPDIR is set
+check_branch_alignment() {
+  # Skip if PGXNBRANCH is explicitly set (user knows what they're doing)
+  if [ -n "${PGXNBRANCH:-}" ]; then
+    debug 3 "check_branch_alignment: PGXNBRANCH explicitly set to '$PGXNBRANCH', skipping check"
+    return 0
+  fi
+
+  # Get pgxntool-test's current branch
+  local test_harness_branch
+  test_harness_branch=$(git -C "$TOPDIR" symbolic-ref --short HEAD 2>/dev/null || echo "")
+  if [ -z "$test_harness_branch" ]; then
+    debug 3 "check_branch_alignment: pgxntool-test not on a branch (detached HEAD?), skipping check"
+    return 0
+  fi
+
+  # Get pgxntool's path
+  local pgxnrepo_path="${PGXNREPO:-${TOPDIR}/../pgxntool}"
+
+  # Only check for local repos
+  if ! local_repo "$pgxnrepo_path"; then
+    debug 3 "check_branch_alignment: pgxntool is remote, skipping check"
+    return 0
+  fi
+
+  # Get pgxntool's current branch
+  local pgxntool_branch
+  pgxntool_branch=$(git -C "$pgxnrepo_path" symbolic-ref --short HEAD 2>/dev/null || echo "")
+  if [ -z "$pgxntool_branch" ]; then
+    debug 3 "check_branch_alignment: pgxntool not on a branch (detached HEAD?), skipping check"
+    return 0
+  fi
+
+  debug 3 "check_branch_alignment: pgxntool-test='$test_harness_branch', pgxntool='$pgxntool_branch'"
+
+  # Check for mismatch
+  if [ "$test_harness_branch" != "$pgxntool_branch" ]; then
+    out
+    out "=========================================================================="
+    out "ERROR: Branch mismatch detected!"
+    out
+    out "  pgxntool-test is on branch: $test_harness_branch"
+    out "  pgxntool is on branch:      $pgxntool_branch"
+    out
+    out "This usually happens when you commit to the wrong branch in pgxntool."
+    out "Tests will fail confusingly because they pull from the wrong branch."
+    out
+    out "To fix:"
+    out "  1. Switch pgxntool to the correct branch:"
+    out "     cd $(cd "$pgxnrepo_path" && pwd) && git checkout $test_harness_branch"
+    out
+    out "  2. Or switch pgxntool-test to match pgxntool:"
+    out "     cd $TOPDIR && git checkout $pgxntool_branch"
+    out
+    out "  3. Or set PGXNBRANCH explicitly to override:"
+    out "     PGXNBRANCH=$pgxntool_branch make test"
+    out "=========================================================================="
+    out
+    return 1
+  fi
+
+  debug 2 "check_branch_alignment: Both repos on '$test_harness_branch', OK"
+  return 0
+}
+
 # Setup pgxntool-related variables
 setup_pgxntool_vars() {
+  # FIRST: Check branch alignment before any other setup
+  # This catches the common error of committing to wrong branch early
+  check_branch_alignment || return 1
+
   # Smart branch detection: if pgxntool-test is on a non-master branch,
   # automatically use the same branch from pgxntool if it exists
   if [ -z "$PGXNBRANCH" ]; then
@@ -197,7 +276,8 @@ setup_pgxntool_vars() {
         if [ "$PGXNTOOL_BRANCH" = "master" ] || [ "$PGXNTOOL_BRANCH" = "$TEST_HARNESS_BRANCH" ]; then
           PGXNBRANCH="$PGXNTOOL_BRANCH"
         else
-          # Different branches - use master as safe fallback
+          # Different branches - this should have been caught by check_branch_alignment
+          # but we keep the warning for safety
           out "WARNING: pgxntool-test is on '$TEST_HARNESS_BRANCH' but pgxntool is on '$PGXNTOOL_BRANCH'"
           out "Using 'master' branch. Set PGXNBRANCH explicitly to override."
           PGXNBRANCH="master"
@@ -890,7 +970,7 @@ get_psql_path() {
   # Return cached result if available
   if [ -n "${_PSQL_PATH:-}" ]; then
     if [ "$_PSQL_PATH" = "__NOT_FOUND__" ]; then
-      echo ""
+      echo
       return 1
     else
       echo "$_PSQL_PATH"
@@ -902,12 +982,12 @@ get_psql_path() {
   if ! psql_path=$(command -v psql 2>/dev/null); then
     # Try to find psql via pg_config
     local pg_bindir
-    pg_bindir=$(pg_config --bindir 2>/dev/null || echo "")
+    pg_bindir=$(pg_config --bindir 2>/dev/null || echo)
     if [ -n "$pg_bindir" ] && [ -x "$pg_bindir/psql" ]; then
       psql_path="$pg_bindir/psql"
     else
       _PSQL_PATH="__NOT_FOUND__"
-      echo ""
+      echo
       return 1
     fi
   fi
@@ -1108,7 +1188,7 @@ ensure_pgtle_extension() {
   
   # Check current version if not cached
   if [ "$_PGTLE_VERSION_CHECKED" != "checked" ]; then
-    _PGTLE_CURRENT_VERSION=$("$psql_path" -X -tAc "SELECT extversion FROM pg_extension WHERE extname = 'pg_tle';" 2>/dev/null | tr -d '[:space:]' || echo "")
+    _PGTLE_CURRENT_VERSION=$("$psql_path" -X -tAc "SELECT extversion FROM pg_extension WHERE extname = 'pg_tle';" 2>/dev/null | tr -d '[:space:]' || echo)
     _PGTLE_VERSION_CHECKED="checked"
   fi
   
@@ -1126,7 +1206,7 @@ ensure_pgtle_extension() {
           PGTLE_EXTENSION_ERROR="pg_tle not configured in shared_preload_libraries (add 'pg_tle' to shared_preload_libraries in postgresql.conf and restart PostgreSQL)"
         elif echo "$create_error" | grep -qi "extension.*already exists"; then
           # Extension exists but wasn't in cache, refresh cache and continue
-          _PGTLE_CURRENT_VERSION=$("$psql_path" -X -tAc "SELECT extversion FROM pg_extension WHERE extname = 'pg_tle';" 2>/dev/null | tr -d '[:space:]' || echo "")
+          _PGTLE_CURRENT_VERSION=$("$psql_path" -X -tAc "SELECT extversion FROM pg_extension WHERE extname = 'pg_tle';" 2>/dev/null | tr -d '[:space:]' || echo)
         else
           # Use first 5 lines of error for context
           PGTLE_EXTENSION_ERROR="Failed to create pg_tle extension: $(echo "$create_error" | head -5 | tr '\n' '; ' | sed 's/; $//')"
@@ -1136,11 +1216,11 @@ ensure_pgtle_extension() {
         fi
       fi
       # Update cache after creation
-      _PGTLE_CURRENT_VERSION=$("$psql_path" -X -tAc "SELECT extversion FROM pg_extension WHERE extname = 'pg_tle';" 2>/dev/null | tr -d '[:space:]' || echo "")
+      _PGTLE_CURRENT_VERSION=$("$psql_path" -X -tAc "SELECT extversion FROM pg_extension WHERE extname = 'pg_tle';" 2>/dev/null | tr -d '[:space:]' || echo)
     else
       # Extension exists, check if update needed
       local newest_version
-      newest_version=$("$psql_path" -X -tAc "SELECT MAX(version) FROM pg_available_extension_versions WHERE name = 'pg_tle';" 2>/dev/null | tr -d '[:space:]' || echo "")
+      newest_version=$("$psql_path" -X -tAc "SELECT MAX(version) FROM pg_available_extension_versions WHERE name = 'pg_tle';" 2>/dev/null | tr -d '[:space:]' || echo)
       if [ -n "$newest_version" ] && [ "$_PGTLE_CURRENT_VERSION" != "$newest_version" ]; then
         local update_error
         if ! update_error=$("$psql_path" -X -c "ALTER EXTENSION pg_tle UPDATE;" 2>&1); then
@@ -1148,7 +1228,7 @@ ensure_pgtle_extension() {
           return 1
         fi
         # Update cache
-        _PGTLE_CURRENT_VERSION=$("$psql_path" -X -tAc "SELECT extversion FROM pg_extension WHERE extname = 'pg_tle';" 2>/dev/null | tr -d '[:space:]' || echo "")
+        _PGTLE_CURRENT_VERSION=$("$psql_path" -X -tAc "SELECT extversion FROM pg_extension WHERE extname = 'pg_tle';" 2>/dev/null | tr -d '[:space:]' || echo)
       fi
     fi
   else
@@ -1167,7 +1247,7 @@ ensure_pgtle_extension() {
         return 1
       fi
       # Update cache
-      _PGTLE_CURRENT_VERSION=$("$psql_path" -X -tAc "SELECT extversion FROM pg_extension WHERE extname = 'pg_tle';" 2>/dev/null | tr -d '[:space:]' || echo "")
+      _PGTLE_CURRENT_VERSION=$("$psql_path" -X -tAc "SELECT extversion FROM pg_extension WHERE extname = 'pg_tle';" 2>/dev/null | tr -d '[:space:]' || echo)
     elif [ "$_PGTLE_CURRENT_VERSION" != "$requested_version" ]; then
       # Extension exists at different version, try to update first
       local update_error
@@ -1205,7 +1285,7 @@ ensure_pgtle_extension() {
         fi
       fi
       # Update cache
-      _PGTLE_CURRENT_VERSION=$("$psql_path" -X -tAc "SELECT extversion FROM pg_extension WHERE extname = 'pg_tle';" 2>/dev/null | tr -d '[:space:]' || echo "")
+      _PGTLE_CURRENT_VERSION=$("$psql_path" -X -tAc "SELECT extversion FROM pg_extension WHERE extname = 'pg_tle';" 2>/dev/null | tr -d '[:space:]' || echo)
     fi
     # Verify we're at the requested version
     if [ "$_PGTLE_CURRENT_VERSION" != "$requested_version" ]; then
@@ -1214,6 +1294,184 @@ ensure_pgtle_extension() {
     fi
   fi
   
+  return 0
+}
+
+# ============================================================================
+# Custom Template Repository Building
+# ============================================================================
+
+# Build a test repository from a custom template
+#
+# This function creates a fully set up test repository from a template directory,
+# similar to what foundation.bats does but with a custom template. It handles:
+# 1. Creating TEST_REPO directory
+# 2. Initializing git
+# 3. Copying template files
+# 4. Committing template files
+# 5. Configuring fake remote
+# 6. Adding pgxntool (via subtree or rsync if dirty)
+# 7. Running setup.sh
+# 8. Committing setup changes
+#
+# Usage:
+#   build_test_repo_from_template "$template_dir"
+#
+# Arguments:
+#   template_dir: Path to the template directory to copy from
+#
+# Prerequisites:
+#   - TOPDIR must be set (call setup_topdir() first)
+#   - TEST_DIR and TEST_REPO must be set (call load_test_env() first)
+#   - PGXNREPO and PGXNBRANCH must be set (done by load_test_env via setup_pgxntool_vars)
+#
+# Returns:
+#   0 on success, 1 on failure
+#
+# After calling this function, TEST_REPO will be a fully initialized repository
+# with pgxntool added and setup.sh run, ready for testing.
+#
+# Example:
+#   setup_file() {
+#     setup_topdir
+#     load_test_env "my-test"
+#     build_test_repo_from_template "${TOPDIR}/my-custom-template"
+#   }
+build_test_repo_from_template() {
+  local template_dir="$1"
+
+  if [ -z "$template_dir" ]; then
+    error "build_test_repo_from_template: template_dir required"
+  fi
+
+  if [ ! -d "$template_dir" ]; then
+    error "build_test_repo_from_template: template directory does not exist: $template_dir"
+  fi
+
+  # Validate prerequisites
+  if [ -z "$TOPDIR" ]; then
+    error "build_test_repo_from_template: TOPDIR not set (call setup_topdir first)"
+  fi
+  if [ -z "$TEST_DIR" ]; then
+    error "build_test_repo_from_template: TEST_DIR not set (call load_test_env first)"
+  fi
+  if [ -z "$TEST_REPO" ]; then
+    error "build_test_repo_from_template: TEST_REPO not set (call load_test_env first)"
+  fi
+  if [ -z "$PGXNREPO" ]; then
+    error "build_test_repo_from_template: PGXNREPO not set"
+  fi
+  if [ -z "$PGXNBRANCH" ]; then
+    error "build_test_repo_from_template: PGXNBRANCH not set"
+  fi
+
+  debug 2 "build_test_repo_from_template: Building from $template_dir"
+
+  # Step 1: Create TEST_REPO directory
+  if [ -d "$TEST_REPO" ]; then
+    error "build_test_repo_from_template: TEST_REPO already exists: $TEST_REPO"
+  fi
+  mkdir "$TEST_REPO" || {
+    error "build_test_repo_from_template: Failed to create TEST_REPO"
+  }
+
+  # Step 2: Initialize git repository
+  (cd "$TEST_REPO" && git init) || {
+    error "build_test_repo_from_template: git init failed"
+  }
+
+  # Step 3: Copy template files
+  rsync -a --exclude='.DS_Store' "$template_dir"/ "$TEST_REPO"/ || {
+    error "build_test_repo_from_template: Failed to copy template files"
+  }
+
+  # Step 4: Commit template files
+  (cd "$TEST_REPO" && git add . && git commit -m "Initial extension files from template") || {
+    error "build_test_repo_from_template: Failed to commit template files"
+  }
+
+  # Step 5: Configure fake remote
+  git init --bare "${TEST_DIR}/fake_repo" >/dev/null 2>&1 || {
+    error "build_test_repo_from_template: Failed to create fake remote"
+  }
+  (cd "$TEST_REPO" && git remote add origin "${TEST_DIR}/fake_repo") || {
+    error "build_test_repo_from_template: Failed to add origin remote"
+  }
+  local current_branch
+  current_branch=$(cd "$TEST_REPO" && git symbolic-ref --short HEAD)
+  (cd "$TEST_REPO" && git push --set-upstream origin "$current_branch") || {
+    error "build_test_repo_from_template: Failed to push to fake remote"
+  }
+
+  # Step 6: Add pgxntool
+  # Wait for filesystem timestamp granularity
+  sleep 1
+  (cd "$TEST_REPO" && git update-index --refresh) || {
+    error "build_test_repo_from_template: git update-index failed"
+  }
+
+  # Check if pgxntool repo is dirty
+  # Note: Use -e instead of -d to handle git worktrees where .git is a file
+  local source_is_dirty=0
+  if [ -e "$PGXNREPO/.git" ]; then
+    if [ -n "$(cd "$PGXNREPO" && git status --porcelain)" ]; then
+      source_is_dirty=1
+      local pgxn_branch
+      pgxn_branch=$(cd "$PGXNREPO" && git symbolic-ref --short HEAD)
+
+      if [ "$pgxn_branch" != "$PGXNBRANCH" ]; then
+        error "build_test_repo_from_template: Source repo is dirty but on wrong branch ($pgxn_branch, expected $PGXNBRANCH)"
+      fi
+
+      out "Source repo is dirty and on correct branch, using rsync instead of git subtree"
+
+      mkdir "$TEST_REPO/pgxntool" || {
+        error "build_test_repo_from_template: Failed to create pgxntool directory"
+      }
+      rsync -a "$PGXNREPO/" "$TEST_REPO/pgxntool/" --exclude=.git || {
+        error "build_test_repo_from_template: Failed to rsync pgxntool"
+      }
+      (cd "$TEST_REPO" && git add --all && git commit -m "Committing unsaved pgxntool changes") || {
+        error "build_test_repo_from_template: Failed to commit pgxntool files"
+      }
+    fi
+  fi
+
+  # If source wasn't dirty, use git subtree
+  if [ $source_is_dirty -eq 0 ]; then
+    (cd "$TEST_REPO" && git subtree add -P pgxntool --squash "$PGXNREPO" "$PGXNBRANCH") || {
+      error "build_test_repo_from_template: git subtree add failed"
+    }
+  fi
+
+  # Verify pgxntool was added
+  if [ ! -f "$TEST_REPO/pgxntool/base.mk" ]; then
+    error "build_test_repo_from_template: pgxntool/base.mk not found after adding pgxntool"
+  fi
+
+  # Step 7: Run setup.sh
+  # Verify repo is clean first
+  local porcelain_output
+  porcelain_output=$(cd "$TEST_REPO" && git status --porcelain)
+  if [ -n "$porcelain_output" ]; then
+    error "build_test_repo_from_template: Repository is dirty before setup.sh"
+  fi
+
+  (cd "$TEST_REPO" && ./pgxntool/setup.sh) || {
+    error "build_test_repo_from_template: setup.sh failed"
+  }
+
+  # Verify Makefile was created
+  if [ ! -f "$TEST_REPO/Makefile" ]; then
+    error "build_test_repo_from_template: Makefile not created by setup.sh"
+  fi
+
+  # Step 8: Commit setup changes
+  (cd "$TEST_REPO" && git commit -am "Add pgxntool setup") || {
+    error "build_test_repo_from_template: Failed to commit setup changes"
+  }
+
+  debug 2 "build_test_repo_from_template: Successfully built repository"
   return 0
 }
 
