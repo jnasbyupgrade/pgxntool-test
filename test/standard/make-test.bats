@@ -79,14 +79,6 @@ setup() {
   assert_success
 }
 
-# NOTE: We used to have a test here that verified expected output files could be
-# committed to git. This was checking that the template repo stayed clean (i.e.,
-# no unexpected files were being generated in test/expected/). However, since
-# we don't currently have anything that should be dirtying the template repo,
-# that test isn't needed. If we add functionality that generates files in
-# test/expected/ during normal operations, we should add back a test to verify
-# those files can be committed.
-
 @test "can remove test directories" {
   # Remove input and output
   rm -rf test/input test/output
@@ -108,6 +100,41 @@ setup() {
   assert_file_exists "Makefile"
 
   run make --version
+  assert_success
+}
+
+# Unique database name tests
+#
+# Verify that make test uses a unique database name based on the project name
+# and a hash of the current directory (REGRESS_DBNAME in base.mk).
+
+@test "unique db name: create test SQL file and expected output" {
+  skip_if_no_postgres
+
+  # Create a simple SQL test that queries the current database name
+  # Use \t and \a so output is just the bare value (no headers/formatting)
+  mkdir -p test/sql
+  cat > test/sql/dbname.sql <<'EOF'
+\a
+\t
+SELECT current_database();
+EOF
+
+  # Get the exact database name from make (authoritative source)
+  # Output format: REGRESS_DBNAME is simple variable set to "value"
+  local expected_dbname
+  expected_dbname=$(make print-REGRESS_DBNAME 2>&1 | sed -n 's/.*set to "\(.*\)"/\1/p')
+  [ -n "$expected_dbname" ] || fail "Could not extract REGRESS_DBNAME from make"
+
+  # Manually create the expected output file
+  mkdir -p test/expected
+  printf '%s\n' "$expected_dbname" > test/expected/dbname.out
+}
+
+@test "unique db name: make test passes" {
+  skip_if_no_postgres
+
+  run make test
   assert_success
 }
 
