@@ -91,6 +91,12 @@ The test subagent is the authoritative source for:
 
 Quick reference: `make test` runs the full test suite.
 
+### Template Design Principles
+
+Tests should generally avoid making changes to template environments. Writing test code to modify the test environment is more complex than having the correct files in the template to begin with. Tests that depend on running `make test` inside a template should strongly consider having the template itself contain the necessary test SQL and expected output files.
+
+Both of these are trade-offs: the goal is to reduce test code complexity.
+
 ## File Structure
 
 ```
