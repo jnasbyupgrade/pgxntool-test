@@ -54,8 +54,8 @@ EOF
   # valid_test.sql was created in previous test
   # Create expected output file matching pg_regress format
   # Note: pg_regress includes comments from SQL files in output
-  mkdir -p test/expected
-  cat > test/expected/valid_test.out <<'EOF'
+  mkdir -p test/build/expected
+  cat > test/build/expected/valid_test.out <<'EOF'
 -- Simple test to verify extension can be created
 SELECT 1;
  ?column? 
@@ -78,8 +78,8 @@ SELECT FROM nonexistent_table WHERE;
 EOF
 
   # Create expected output file matching pg_regress format for the error
-  mkdir -p test/expected
-  cat > test/expected/invalid_test.out <<'EOF'
+  mkdir -p test/build/expected
+  cat > test/build/expected/invalid_test.out <<'EOF'
 -- This SQL has a syntax error
 SELECT FROM nonexistent_table WHERE;
 ERROR:  syntax error at or near ";"
@@ -115,8 +115,8 @@ SELECT 1;
 EOF
   
   # Create expected output file matching pg_regress format
-  mkdir -p test/expected
-  cat > test/expected/prereq_test.out <<'EOF'
+  mkdir -p test/build/expected
+  cat > test/build/expected/prereq_test.out <<'EOF'
 SELECT 1;
  ?column? 
 ----------
@@ -139,8 +139,8 @@ SELECT 2;
 EOF
   
   # Create expected output file matching pg_regress format for the new test
-  mkdir -p test/expected
-  cat > test/expected/independent_test.out <<'EOF'
+  mkdir -p test/build/expected
+  cat > test/build/expected/independent_test.out <<'EOF'
 SELECT 2;
  ?column? 
 ----------
@@ -155,7 +155,7 @@ EOF
 -- This SQL is now valid (fixed from previous test)
 SELECT 3;
 EOF
-  cat > test/expected/invalid_test.out <<'EOF'
+  cat > test/build/expected/invalid_test.out <<'EOF'
 -- This SQL is now valid (fixed from previous test)
 SELECT 3;
  ?column? 
@@ -170,8 +170,8 @@ EOF
 
   # Also ensure expected files exist for all other test/build files from previous tests
   # disabled_test.sql - needs expected file
-  if [ -f "test/build/disabled_test.sql" ] && [ ! -f "test/expected/disabled_test.out" ]; then
-    cat > test/expected/disabled_test.out <<'EOF'
+  if [ -f "test/build/disabled_test.sql" ] && [ ! -f "test/build/expected/disabled_test.out" ]; then
+    cat > test/build/expected/disabled_test.out <<'EOF'
 SELECT 1;
  ?column? 
 ----------

@@ -1,0 +1,21 @@
+-- ============================================================================
+-- Verify test/install state persists into the main test suite
+-- ============================================================================
+--
+-- DO NOT MODIFY THIS FILE WITHOUT EXPLICIT HUMAN APPROVAL.
+--
+-- This test exists to catch a specific, subtle bug: if test/install and the
+-- main test suite run in separate pg_regress invocations, pg_regress drops
+-- and recreates the database between them, destroying everything test/install
+-- set up. The ONLY way test/install state can persist is if install files and
+-- regular test files run within a SINGLE pg_regress invocation (via a schedule
+-- file that lists install files first).
+--
+-- If this test fails with "relation pgxntool_install_marker does not exist",
+-- it means the test-install implementation is broken: it's running install
+-- files in a separate pg_regress invocation instead of the same one.
+--
+-- This file is intentionally minimal to prevent well-meaning "improvements"
+-- from masking the failure it's designed to detect.
+-- ============================================================================
+SELECT marker FROM pgxntool_install_marker;

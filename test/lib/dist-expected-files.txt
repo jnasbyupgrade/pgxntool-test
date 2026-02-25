@@ -41,9 +41,17 @@ sql/pgxntool-test.sql
 # Test files (root level, copied from t/)
 test/
 test/deps.sql
+test/expected/
+test/expected/verify_install_marker.out
 test/input/
 test/input/pgxntool-test.source
+test/install/
+test/install/.gitignore
+test/install/create_install_marker.out
+test/install/create_install_marker.sql
 test/pgxntool
+test/sql/
+test/sql/verify_install_marker.sql
 
 # pgxntool framework (the build system itself)
 pgxntool/

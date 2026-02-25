@@ -77,16 +77,16 @@ setup() {
 
 @test "documentation source files exist" {
   # OK to fail: ls returns non-zero if no files match, which would mean test should fail
-  local doc_files=$(ls "$TEST_DIR/doc_repo/doc"/*.adoc "$TEST_DIR/doc_repo/doc"/*.asciidoc 2>/dev/null || echo)
+  local doc_files=$(ls "$TEST_DIR/doc_repo/doc"/*.adoc "$TEST_DIR/doc_repo/doc"/*.asc "$TEST_DIR/doc_repo/doc"/*.asciidoc 2>/dev/null || echo)
   [ -n "$doc_files" ]
 }
 
 @test "ASCIIDOC='' make install does not create docs" {
   cd "$TEST_DIR/doc_repo"
 
-  # Remove any existing HTML files
-  local input=$(ls doc/*.adoc doc/*.asciidoc 2>/dev/null)
-  local expected=$(echo "$input" | sed -Ee 's/(adoc|asciidoc)$/html/')
+  # Remove any existing HTML files (all asciidoc extensions: adoc, asc, asciidoc)
+  local input=$(ls doc/*.adoc doc/*.asc doc/*.asciidoc 2>/dev/null)
+  local expected=$(echo "$input" | sed -Ee 's/(adoc|asc|asciidoc)$/html/')
   rm -f $expected
 
   # Install without ASCIIDOC (should fail, but we only care about HTML files not being created)
@@ -108,9 +108,9 @@ setup() {
 @test "make test creates documentation" {
   cd "$TEST_DIR/doc_repo"
 
-  # Get expected HTML files
-  local input=$(ls doc/*.adoc doc/*.asciidoc 2>/dev/null)
-  local expected=$(echo "$input" | sed -Ee 's/(adoc|asciidoc)$/html/')
+  # Get expected HTML files (all asciidoc extensions: adoc, asc, asciidoc)
+  local input=$(ls doc/*.adoc doc/*.asc doc/*.asciidoc 2>/dev/null)
+  local expected=$(echo "$input" | sed -Ee 's/(adoc|asc|asciidoc)$/html/')
 
   # Run make test (may fail if PostgreSQL not running, but we only care about HTML generation)
   run make test

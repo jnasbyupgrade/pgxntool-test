@@ -3,10 +3,10 @@
 # Test: test/install feature
 #
 # Tests that the test/install feature works correctly:
-# - test/install files run before test/sql files when test/install/ exists
-# - Schedule file is generated correctly
+# - Schedule files are generated when test/install/ has SQL files
+# - Install schedule lists files with ../install/ prefix
 # - test/install can be disabled via PGXNTOOL_ENABLE_TEST_INSTALL
-# - Execution order is preserved via schedule file
+# - make clean removes generated schedule files
 
 load ../lib/helpers
 
@@ -26,189 +26,68 @@ setup() {
   mkdir -p test/install test/sql test/expected
 }
 
-@test "schedule file is not created when test/install/ is missing" {
-  # Remove test/install if it exists
-  rm -rf test/install
-  # Also remove any existing schedule file from previous tests
-  rm -f test/.schedule
+@test "test/install not enabled when test/install/ is empty" {
+  # Remove all SQL files from test/install
+  rm -f test/install/*.sql
 
-  # Schedule file should not exist
-  assert_file_not_exists "test/.schedule"
+  # Schedule files should not be generated
+  run make -n installcheck 2>&1
+  assert_success
+  # Should NOT reference install schedule
+  ! echo "$output" | grep -q "install/schedule"
 }
 
-@test "can create test/install directory" {
-  mkdir -p test/install
-  assert_dir_exists "test/install"
-}
-
-@test "schedule file is created when test/install/ has files" {
-  # Create test/install file (directories already exist from setup)
+@test "schedule files generated when test/install/ has SQL files" {
+  # Create a SQL file in test/install with its expected output
   cat > test/install/setup.sql <<'EOF'
 SELECT 1;
 EOF
+  printf 'SELECT 1;\n ?column? \n----------\n        1\n(1 row)\n\n' > test/install/setup.out
 
-  # Create a regular test file
-  cat > test/sql/regular_test.sql <<'EOF'
-SELECT 2;
-EOF
-
-  # Generate the schedule file - files exist so auto-detection should work
-  run make test/.schedule
-  [ "$status" -eq 0 ]
-  assert_file_exists "test/.schedule"
+  # Dry-run should reference schedule files
+  run make -n installcheck 2>&1
+  assert_success
+  echo "$output" | grep -q "schedule"
 }
 
-@test "schedule file lists test/install files before test/sql files" {
-  # Remove any existing test files to ensure clean state
-  rm -f test/sql/*.sql test/install/*.sql test/.schedule
-  
-  # Create both test/install and test/sql files (directories exist from setup)
-  cat > test/install/first.sql <<'EOF'
-SELECT 1;
-EOF
-  cat > test/sql/second.sql <<'EOF'
-SELECT 2;
-EOF
+@test "install schedule lists files with ../install/ prefix" {
+  # setup.sql created in previous test
+  run make test/install/schedule
+  assert_success
+  assert_file_exists "test/install/schedule"
 
-  # Generate schedule file - should succeed
-  # Force Make to re-parse by touching Makefile or using -B flag
-  run make -B test/.schedule
-  [ "$status" -eq 0 ]
-  assert_file_exists "test/.schedule"
-
-  # Verify schedule file contents - first should come before second
-  # Schedule file has comment line, then test names
-  # We need to check that "first" appears before "second" in the file
-  local actual=$(grep -v '^#' test/.schedule | tr -d '\r')
-  local first_pos=$(echo "$actual" | grep -n "^first$" | cut -d: -f1)
-  local second_pos=$(echo "$actual" | grep -n "^second$" | cut -d: -f1)
-  
-  [ -n "$first_pos" ] || { echo "Schedule file contents: $actual"; false; }
-  [ -n "$second_pos" ] || { echo "Schedule file contents: $actual"; false; }
-  [ "$first_pos" -lt "$second_pos" ]
+  # Schedule should reference install files with relative path
+  run grep "../install/setup" test/install/schedule
+  assert_success
 }
 
 @test "test/install can be disabled via PGXNTOOL_ENABLE_TEST_INSTALL" {
-  # Ensure test/install exists
-  mkdir -p test/install
-  cat > test/install/disabled_setup.sql <<'EOF'
-SELECT 1;
-EOF
-
-  # Disable test/install
-  # Clean up any existing schedule file
-  rm -f test/.schedule
-
-  # When disabled, schedule file should not be created
-  assert_file_not_exists "test/.schedule"
+  # When disabled, schedule files should not be generated
+  run make -n installcheck PGXNTOOL_ENABLE_TEST_INSTALL=no 2>&1
+  assert_success
+  # Should NOT reference install schedule
+  ! echo "$output" | grep -q "install/schedule"
 }
 
-@test "test target includes schedule file when enabled" {
-  # Create test files (directories exist from setup)
-  cat > test/install/prereq_test.sql <<'EOF'
-SELECT 1;
-EOF
-  cat > test/sql/regular_test.sql <<'EOF'
-SELECT 2;
-EOF
+@test "make clean removes install schedule file" {
+  # Generate schedule file first
+  make test/install/schedule
 
-  # Check that installcheck includes schedule file as dependency
-  # Schedule file generation should be a prerequisite of installcheck
-  run make -n installcheck 2>&1
-  [ "$status" -eq 0 ]
-  echo "$output" | grep -q "test/.schedule"
-}
-
-@test "test/install files run before test/sql files" {
-  # Create a test that verifies ordering using timestamps (directories exist from setup)
-  cat > test/install/install_order.sql <<'EOF'
--- Create a table to track execution order
-CREATE TABLE IF NOT EXISTS execution_order (test_name text, executed_at timestamp);
-INSERT INTO execution_order VALUES ('install_order', clock_timestamp());
-EOF
-
-  cat > test/sql/test_order.sql <<'EOF'
--- This test should see the table created by install_order
-INSERT INTO execution_order VALUES ('test_order', clock_timestamp());
-SELECT test_name FROM execution_order ORDER BY executed_at;
-EOF
-
-  # Create expected output files
-  mkdir -p test/expected
-  # install_order should create the table and insert first row
-  echo "install_order" > test/expected/install_order.out
-  # test_order should see both rows in order
-  cat > test/expected/test_order.out <<'EOF'
-install_order
-test_order
-EOF
-
-  # Run the full test suite
-  run make test
-  [ "$status" -eq 0 ]
-
-  # Verify that test_order.out shows install_order before test_order
-  if [ -f "test/results/test_order.out" ]; then
-    local install_pos=$(grep -n "^install_order$" test/results/test_order.out | cut -d: -f1)
-    local test_pos=$(grep -n "^test_order$" test/results/test_order.out | cut -d: -f1)
-    [ -n "$install_pos" ]
-    [ -n "$test_pos" ]
-    [ "$install_pos" -lt "$test_pos" ]
-  fi
-}
-
-@test "make clean removes schedule file" {
-  # Create test files to generate schedule file (directories exist from setup)
-  cat > test/install/clean_test.sql <<'EOF'
-SELECT 1;
-EOF
-  cat > test/sql/clean_test2.sql <<'EOF'
-SELECT 2;
-EOF
-
-  # Generate schedule file
-  run make test/.schedule
-  [ "$status" -eq 0 ]
-  assert_file_exists "test/.schedule"
+  assert_file_exists "test/install/schedule"
 
   # Run make clean
   run make clean
-  [ "$status" -eq 0 ]
+  assert_success
 
   # Schedule file should be removed
-  assert_file_not_exists "test/.schedule"
-}
-
-@test "make test works after make clean" {
-  # Create test files (directories exist from setup)
-  cat > test/install/final_test.sql <<'EOF'
-SELECT 1;
-EOF
-  cat > test/sql/final_test2.sql <<'EOF'
-SELECT 2;
-EOF
-
-  # Create expected output files
-  mkdir -p test/expected
-  echo "1" > test/expected/final_test.out
-  echo "2" > test/expected/final_test2.out
-
-  # Clean first
-  make clean || true
-
-  # Then run test - should regenerate schedule file and run tests
-  run make test
-  [ "$status" -eq 0 ]
-
-  # Verify schedule file was regenerated
-  assert_file_exists "test/.schedule"
+  assert_file_not_exists "test/install/schedule"
 }
 
 @test "repository is still functional after test/install tests" {
   # Basic sanity check
   assert_file_exists "Makefile"
   run make --version
-  [ "$status" -eq 0 ]
+  assert_success
 }
 
 # vi: expandtab sw=2 ts=2

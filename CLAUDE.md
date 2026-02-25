@@ -14,7 +14,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Subagents are automatically discovered and loaded at session start from:
 - `.claude/agents/*.md` - Specialized domain experts (invoked via Task tool)
-- `.claude/commands/*.md` - Command/skill handlers (invoked via Skill tool)
+- `.claude/skills/*/SKILL.md` - Skills with preprocessing scripts and guides (invoked via Skill tool)
+- `.claude/commands/*.md` - Simple command handlers (invoked via Skill tool)
 
 These subagents are already available in your context - you don't need to discover them. Just USE them whenever their expertise is relevant.
 
@@ -26,9 +27,10 @@ These subagents are already available in your context - you don't need to discov
 
 **At the start of every session**: Invoke the pgtle subagent to check if there are any newer versions of pg_tle than what it has already analyzed. If new versions exist, the subagent should analyze them for API changes and update its knowledge of version boundaries.
 
-## Claude Commands
+## Claude Skills and Commands
 
-The `/commit` Claude Command lives in this repository (`.claude/commands/commit.md`). pgxntool no longer has its own copy.
+The `/commit` skill lives in `.claude/skills/commit/` with a preprocessing script and format guide.
+Other commands (worktree, pr, pgxntool-update) remain in `.claude/commands/`.
 
 ## What This Repo Is
 
@@ -103,7 +105,7 @@ pgxntool-test/
 ├── template/                 # Template extension files for test repos
 ├── tests/                    # Test suite (see test subagent for details)
 ├── test/bats/                # BATS framework (git submodule)
-├── .claude/                  # Claude subagents and commands
+├── .claude/                  # Claude subagents, skills, and commands
 └── .envs/                    # Test environments (gitignored)
 ```
 
