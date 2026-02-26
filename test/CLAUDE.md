@@ -366,6 +366,17 @@ cd "$TEST_REPO" || error "Failed to cd to TEST_REPO"  # Error visible immediatel
 
 ## Shell Error Handling Rules
 
+### BATS Runs With `set -eET`
+
+BATS executes test files via `bats-exec-file`, which starts with `set -eET` (errexit, errtrace, trace). This means:
+
+- **All functions** — `setup_file()`, `setup()`, `@test` blocks, `teardown()`, `teardown_file()` — run under errexit.
+- **Any failing command** will abort the current function. In `setup_file`, this causes BATS to report `"setup_file failed"` with a stack trace and skip all tests in the file.
+- **Subshells** `( ... )` also run under errexit. A failure inside a subshell exits the subshell non-zero, which errexit in the parent catches.
+- **`local var=$(cmd)` masks exit status** — the `local` builtin always returns 0, hiding failures in the command substitution. Split these into two lines: `local var` then `var=$(cmd)`.
+
+**Implication for setup code**: You do not need explicit exit status checks on every command in `setup_file` — errexit handles that. But if this isn't obvious in a given context, add a comment explaining the reliance on `set -e`.
+
 ### Never Use BATS `skip` Unless Explicitly Told
 
 **CRITICAL RULE:** You should never use BATS `skip` unless explicitly told to do so by the user.
