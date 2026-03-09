@@ -27,12 +27,6 @@ setup() {
   cd "$TEST_REPO"
 }
 
-@test "template includes install marker files" {
-  assert_file_exists "test/install/create_install_marker.sql"
-  assert_file_exists "test/sql/verify_install_marker.sql"
-  assert_file_exists "test/expected/verify_install_marker.out"
-}
-
 @test "test/install is auto-detected as enabled" {
   # With test/install/ files present, schedule files should be generated
   run make -n test 2>&1
@@ -43,16 +37,11 @@ setup() {
 @test "install marker state persists into main test suite" {
   skip_if_no_postgres
 
-  # pgxntool-test.sql is generated from a .source file and has no expected
-  # output file. pg_regress aborts if the expected file is missing, so create
-  # an empty one. (This is a pre-existing gap in the touch rule for .source tests.)
-  touch test/expected/pgxntool-test.out
-
   run make test
 
-  # Verify the specific marker test produced results and passed.
-  # (pgxntool-test.sql is a template placeholder that always fails, so we
-  # can't just check for regression.diffs — we check the specific test.)
+  # The marker test verifies that test/install state (a table) survived into
+  # the main test suite — meaning both phases ran in the same pg_regress
+  # invocation. Check that it produced the expected output.
   assert_file_exists test/results/verify_install_marker.out
   run diff test/expected/verify_install_marker.out test/results/verify_install_marker.out
   assert_success

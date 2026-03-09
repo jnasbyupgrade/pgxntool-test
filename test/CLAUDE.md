@@ -2,6 +2,31 @@
 
 This file provides guidance for AI assistants (like Claude Code) when working with the BATS test system in this directory.
 
+## Critical Performance Directive: Minimize Commands in Tests
+
+**Every command run in the test suite makes the entire suite longer and slower.** The test suite is already slow; do not make it worse.
+
+**ALWAYS try to reduce the number of commands.** Before adding any command to a test, ask: can this be eliminated by restructuring the test or fixing the template?
+
+Specific guidelines:
+- **Run the fewest commands possible** to verify a behavior
+- **Combine related assertions** into a single test rather than separate tests when both require the same setup
+- **Use `make -n` (dry run)** instead of the real target when you only need to check what would run
+- **Avoid redundant state setup**: if the previous test already put the environment in the right state, don't repeat it
+
+## Critical Template Quality Directive
+
+**Tests MUST be set up correctly by the template.** If the template is not in a good working state, it creates extra work in many tests and defeats the purpose of isolated test environments.
+
+The whole reason independent tests use isolated environments (one environment per test suite) is so one test suite can modify things freely without disrupting others. That isolation only works if the template starts in a clean, working state.
+
+**What "good working state" means:**
+- `make test` succeeds (or would succeed if PostgreSQL is running)
+- All expected output files exist and are correct
+- No workarounds are needed in tests to compensate for template deficiencies
+
+**Consequence**: If a test needs to work around a broken template (e.g., creating empty expected files, or needing `|| true` on `make test`), fix the template instead.
+
 ## Critical Architecture Understanding
 
 ### The Foundation and Sequential Test Pattern

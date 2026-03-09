@@ -252,6 +252,7 @@ In a real extension, these would already exist before adding pgxntool."
 
   # Validate prerequisites before attempting git subtree
   # 1. Check PGXNREPO is accessible and safe
+  # Use -e instead of -d: for git worktrees, .git is a file, not a directory
   if [ ! -e "$PGXNREPO/.git" ]; then
     # Not a local directory - must be a valid remote URL
 

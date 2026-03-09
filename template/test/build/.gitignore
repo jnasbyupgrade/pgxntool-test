@@ -1,0 +1,5 @@
+# pg_regress generates sql/ from test/build/*.sql (cleaned by make clean)
+sql/
+# pg_regress artifacts
+*.out.diff
+regression.diffs

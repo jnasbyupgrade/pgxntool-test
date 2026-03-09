@@ -181,7 +181,8 @@ EOF
 
   # Run make results - it runs make test (which regenerates results), then copies results to expected
   # But it should NOT overwrite files that have output/*.source counterparts
-  # Disable verify-results since deps.sql has placeholder content that causes test failures
+  # Disable verify-results to avoid interference; the verify-results feature itself is tested
+  # in test/standard/test-verify-results.bats
   run make PGXNTOOL_ENABLE_VERIFY_RESULTS=no results
   assert_success
 
