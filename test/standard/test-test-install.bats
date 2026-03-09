@@ -10,6 +10,7 @@
 # - test/install can be disabled via PGXNTOOL_ENABLE_TEST_INSTALL
 # - make clean removes generated schedule files
 # - test/install is not enabled when test/install/ is empty
+# - test/install can be disabled even when test/install/ has SQL files
 
 load ../lib/helpers
 
@@ -29,7 +30,7 @@ setup() {
 
 @test "test/install is auto-detected when test/install/ has SQL files" {
   # Template includes test/install/create_install_marker.sql
-  run make -n installcheck 2>&1
+  run make -n test 2>&1
   assert_success
   echo "$output" | grep -q "schedule"
 }
@@ -44,11 +45,11 @@ setup() {
   assert_success
 }
 
-@test "test/install can be disabled via PGXNTOOL_ENABLE_TEST_INSTALL" {
-  run make -n installcheck PGXNTOOL_ENABLE_TEST_INSTALL=no 2>&1
+@test "test/install can be disabled even when directory has SQL files" {
+  # Even with files present, disabled means no schedule in the plan
+  run make -n test PGXNTOOL_ENABLE_TEST_INSTALL=no 2>&1
   assert_success
-  # Should NOT reference install schedule
-  ! echo "$output" | grep -q "install/schedule"
+  assert_not_contains "$output" "install/schedule"
 }
 
 @test "make clean removes install schedule file" {
@@ -67,7 +68,7 @@ setup() {
   # Temporarily remove all SQL files from test/install
   rm -f test/install/*.sql
 
-  run make -n installcheck 2>&1
+  run make -n test 2>&1
   local status_code=$status
 
   # Restore committed template files

@@ -181,9 +181,7 @@ EOF
 
   # Run make results - it runs make test (which regenerates results), then copies results to expected
   # But it should NOT overwrite files that have output/*.source counterparts
-  # Disable verify-results to avoid interference; the verify-results feature itself is tested
-  # in test/standard/test-verify-results.bats
-  run make PGXNTOOL_ENABLE_VERIFY_RESULTS=no results
+  run make results
   assert_success
 
   # The expected file should still have the source content (regenerated from output/*.source)
@@ -205,8 +203,7 @@ EOF
   rm -f test/expected/pgxntool-test.out
 
   # Run make results - it runs make test (which regenerates results), then copies results to expected
-  # Disable verify-results since deps.sql has placeholder content that causes test failures
-  run make PGXNTOOL_ENABLE_VERIFY_RESULTS=no results
+  run make results
   assert_success
 
   # Verify result file still exists and has content after make results (make test regenerated it)
@@ -242,8 +239,7 @@ EOF
   rm -f test/expected/pgxntool-test.out
 
   # Run make results - it runs make test (which regenerates results), then copies results to expected
-  # Disable verify-results since deps.sql has placeholder content that causes test failures
-  run make PGXNTOOL_ENABLE_VERIFY_RESULTS=no results
+  run make results
   assert_success
 
   # Non-source file should be copied from results

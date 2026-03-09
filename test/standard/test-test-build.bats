@@ -12,6 +12,7 @@
 # - test-build can be disabled via PGXNTOOL_ENABLE_TEST_BUILD
 # - test-build runs before regular tests when enabled
 # - test-build target is absent when test/build/ is removed
+# - PGXNTOOL_ENABLE_TEST_BUILD=yes errors when test/build/ is empty or missing
 
 load ../lib/helpers
 
@@ -58,23 +59,37 @@ EOF
 }
 
 @test "test-build can be disabled via PGXNTOOL_ENABLE_TEST_BUILD" {
+  # Empty string on command line also disables (same as =no); see docs for why
   run make list PGXNTOOL_ENABLE_TEST_BUILD=
-  [ "$status" -eq 0 ]
-  echo "$output" | grep -qv "test-build"
+  assert_success
+  assert_not_contains "$output" "test-build"
+}
+
+@test "test-build can be disabled via PGXNTOOL_ENABLE_TEST_BUILD=no" {
+  run make list PGXNTOOL_ENABLE_TEST_BUILD=no
+  assert_success
+  assert_not_contains "$output" "test-build"
 }
 
 @test "test target includes test-build when enabled" {
   run make -n test 2>&1
-  [ "$status" -eq 0 ]
-  echo "$output" | grep -q "test-build"
+  assert_success
+  assert_contains "$output" "test-build"
 }
 
 @test "test-build target does not exist when test/build/ is removed" {
   rm -rf test/build
 
   run make list
-  [ "$status" -eq 0 ]
-  echo "$output" | grep -qv "test-build"
+  assert_success
+  assert_not_contains "$output" "test-build"
+}
+
+@test "PGXNTOOL_ENABLE_TEST_BUILD=yes errors when test/build/ is missing" {
+  # test/build/ was removed in the previous test
+  # Setting =yes explicitly should cause an error when no files are found
+  run make test-build PGXNTOOL_ENABLE_TEST_BUILD=yes
+  assert_failure
 }
 
 # vi: expandtab sw=2 ts=2
