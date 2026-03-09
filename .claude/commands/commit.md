@@ -1,6 +1,6 @@
 ---
 description: Create a git commit following project standards and safety protocols
-allowed-tools: Bash(git status:*), Bash(git log:*), Bash(git add:*), Bash(git diff:*), Bash(git commit:*), Bash(make test:*), Read, Edit
+allowed-tools: Bash(git *), Bash(make test*), Bash(make foundation*), Read, Edit, Task
 ---
 
 # commit
@@ -34,8 +34,11 @@ Create a git commit following all project standards and safety protocols for pgx
    - Run in background so we can continue with analysis
    - Tests will be checked before committing
 
-2. **While tests run**, gather information in parallel:
-   - `git status`, `git diff --stat`, `git log -10 --oneline` for both repos
+2. **While tests run**, gather repo state:
+   - Combine all git queries into a single Bash call per repo to minimize approvals:
+     `git status && git diff --stat && git log -10 --oneline`
+   - If conversation context already makes clear that only one repo has changes
+     (e.g., "test-only change", no pgxntool files modified), skip the unchanged repo entirely
 
 3. **Check if HISTORY.asc needs updating** (for pgxntool changes only):
    - Read `../pgxntool/HISTORY.asc`
