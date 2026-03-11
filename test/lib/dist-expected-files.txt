@@ -40,6 +40,10 @@ sql/pgxntool-test.sql
 
 # Test files (root level, copied from t/)
 test/
+test/build/
+test/build/build_check.sql
+test/build/expected/
+test/build/expected/build_check.out
 test/deps.sql
 test/expected/
 test/expected/verify_install_marker.out

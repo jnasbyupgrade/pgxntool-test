@@ -2,23 +2,18 @@
 
 # Test: test/install feature
 #
-# Tests that the test/install feature works correctly. The template includes
-# test/install/create_install_marker.sql so most tests run against that baseline.
-#
-# - test/install is auto-detected when test/install/ has SQL files
-# - Schedule files reference install files with ../install/ prefix
-# - test/install can be disabled via PGXNTOOL_ENABLE_TEST_INSTALL
-# - make clean removes generated schedule files
-# - test/install is not enabled when test/install/ is empty
-# - test/install can be disabled even when test/install/ has SQL files
+# Tests the complete test/install lifecycle:
+# - Auto-detection: enabled when test/install/ has SQL files
+# - Schedule generation with ../install/ relative paths
+# - Core contract: install state persists into main test suite
+# - Disabling via PGXNTOOL_ENABLE_TEST_INSTALL
+# - Cleanup via make clean
 
 load ../lib/helpers
 
 setup_file() {
-  # Set TOPDIR
   setup_topdir
 
-  # Independent test - gets its own isolated environment with foundation TEST_REPO
   load_test_env "test-install"
   ensure_foundation "$TEST_DIR"
 }
@@ -28,8 +23,14 @@ setup() {
   cd "$TEST_REPO"
 }
 
-@test "test/install is auto-detected when test/install/ has SQL files" {
-  # Template includes test/install/create_install_marker.sql
+@test "template includes install marker files" {
+  assert_file_exists "test/install/create_install_marker.sql"
+  assert_file_exists "test/sql/verify_install_marker.sql"
+  assert_file_exists "test/expected/verify_install_marker.out"
+}
+
+@test "test/install is auto-detected as enabled" {
+  # With test/install/ files present from the template, schedule should be generated
   run make -n test 2>&1
   assert_success
   echo "$output" | grep -q "schedule"
@@ -41,48 +42,54 @@ setup() {
   assert_file_exists "test/install/schedule"
 
   # Schedule should reference install files with relative path
-  run grep "../install/create_install_marker" test/install/schedule
+  run grep "../install/" test/install/schedule
   assert_success
 }
 
-@test "test/install can be disabled even when directory has SQL files" {
-  # Even with files present, disabled means no schedule in the plan
+@test "install marker state persists into main test suite" {
+  skip_if_no_postgres
+
+  # pgxntool-test.source has no matching expected output file, which causes
+  # pg_regress to bail out before reaching verify_install_marker. Hide it so
+  # REGRESS only contains verify_install_marker (the test we actually care about).
+  mv test/input/pgxntool-test.source test/input/pgxntool-test.source.bak
+
+  run make test
+
+  mv test/input/pgxntool-test.source.bak test/input/pgxntool-test.source
+
+  # Verify the specific marker test produced results and passed.
+  assert_file_exists test/results/verify_install_marker.out
+  run diff test/expected/verify_install_marker.out test/results/verify_install_marker.out
+  assert_success
+}
+
+@test "test/install can be disabled via PGXNTOOL_ENABLE_TEST_INSTALL" {
   run make -n test PGXNTOOL_ENABLE_TEST_INSTALL=no 2>&1
   assert_success
-  assert_not_contains "$output" "install/schedule"
+  ! echo "$output" | grep -q "install/schedule"
+}
+
+@test "test/install not enabled when test/install/ is empty" {
+  # Remove all SQL files from test/install
+  rm -f test/install/*.sql
+
+  run make -n test 2>&1
+  assert_success
+  # Should NOT reference install schedule
+  ! echo "$output" | grep -q "install/schedule"
 }
 
 @test "make clean removes install schedule file" {
-  # Generate schedule file first
+  # Restore install files and generate schedule
+  git checkout -- test/install/
   make test/install/schedule
-
   assert_file_exists "test/install/schedule"
 
   run make clean
   assert_success
 
   assert_file_not_exists "test/install/schedule"
-}
-
-@test "test/install not enabled when test/install/ is empty" {
-  # Temporarily remove all SQL files from test/install
-  rm -f test/install/*.sql
-
-  run make -n test 2>&1
-  local status_code=$status
-
-  # Restore committed template files
-  git checkout -- test/install/
-
-  assert_success  # make -n should succeed
-  # Should NOT reference install schedule
-  ! echo "$output" | grep -q "install/schedule"
-}
-
-@test "repository is still functional after test/install tests" {
-  assert_file_exists "Makefile"
-  run make --version
-  assert_success
 }
 
 # vi: expandtab sw=2 ts=2

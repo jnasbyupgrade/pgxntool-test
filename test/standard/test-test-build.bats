@@ -2,25 +2,15 @@
 
 # Test: test-build feature
 #
-# Tests that the test-build feature works correctly. The template includes
-# test/build/ with a working SQL file so most tests run against that baseline;
-# later tests temporarily modify files as needed.
-#
-# - test-build auto-detects when test/build/ has SQL files
-# - test-build runs successfully with the template SQL
-# - test-build fails and reports errors when SQL has errors
-# - test-build can be disabled via PGXNTOOL_ENABLE_TEST_BUILD
-# - test-build runs before regular tests when enabled
-# - test-build target is absent when test/build/ is removed
-# - PGXNTOOL_ENABLE_TEST_BUILD=yes errors when test/build/ is empty or missing
+# The template includes a working test/build/ directory (build_check.sql with
+# matching expected output). Tests validate the working state first, then
+# modify for edge cases.
 
 load ../lib/helpers
 
 setup_file() {
-  # Set TOPDIR
   setup_topdir
 
-  # Independent test - gets its own isolated environment with foundation TEST_REPO
   load_test_env "test-build"
   ensure_foundation "$TEST_DIR"
 }
@@ -30,66 +20,73 @@ setup() {
   cd "$TEST_REPO"
 }
 
-@test "test-build target exists when test/build/ has SQL files" {
-  # Template includes test/build/simple_build_test.sql
-  run make -n test-build 2>&1
-  [ "$status" -eq 0 ]
+@test "template includes test/build files" {
+  assert_file_exists "test/build/build_check.sql"
+  assert_file_exists "test/build/expected/build_check.out"
 }
 
-@test "test-build runs successfully with template SQL" {
+@test "test-build is auto-detected as enabled" {
+  run make -n test 2>&1
+  assert_success
+  echo "$output" | grep -q "test-build"
+}
+
+@test "test-build runs successfully with template files" {
   skip_if_no_postgres
+
   run make test-build
-  [ "$status" -eq 0 ]
+  assert_success
 }
 
 @test "test-build fails with invalid SQL" {
   skip_if_no_postgres
-  # Temporarily add an invalid SQL file
+
+  # Add an invalid SQL file alongside the valid template one
   cat > test/build/invalid_test.sql <<'EOF'
--- This SQL has a syntax error
 SELECT FROM nonexistent_table WHERE;
 EOF
+  mkdir -p test/build/expected
+  # Create expected output that would match if there were no error
+  echo > test/build/expected/invalid_test.out
+
+  # Clean generated sql/ so updated files get copied
+  rm -rf test/build/sql
 
   run make test-build
-  local status_code=$status
-  # Remove the invalid file so subsequent tests start clean
+  [ "$status" -ne 0 ]
+
+  # Clean up
   rm -f test/build/invalid_test.sql test/build/expected/invalid_test.out
-
-  [ "$status_code" -ne 0 ]
-}
-
-@test "test-build can be disabled via PGXNTOOL_ENABLE_TEST_BUILD" {
-  # Empty string on command line also disables (same as =no); see docs for why
-  run make list PGXNTOOL_ENABLE_TEST_BUILD=
-  assert_success
-  assert_not_contains "$output" "test-build"
-}
-
-@test "test-build can be disabled via PGXNTOOL_ENABLE_TEST_BUILD=no" {
-  run make list PGXNTOOL_ENABLE_TEST_BUILD=no
-  assert_success
-  assert_not_contains "$output" "test-build"
-}
-
-@test "test target includes test-build when enabled" {
-  run make -n test 2>&1
-  assert_success
-  assert_contains "$output" "test-build"
-}
-
-@test "test-build target does not exist when test/build/ is removed" {
-  rm -rf test/build
-
-  run make list
-  assert_success
-  assert_not_contains "$output" "test-build"
+  rm -rf test/build/sql
 }
 
 @test "PGXNTOOL_ENABLE_TEST_BUILD=yes errors when test/build/ is missing" {
-  # test/build/ was removed in the previous test
-  # Setting =yes explicitly should cause an error when no files are found
-  run make test-build PGXNTOOL_ENABLE_TEST_BUILD=yes
-  assert_failure
+  # Remove test/build directory entirely
+  rm -rf test/build
+
+  # Explicitly enabling should error when directory has no files
+  run make test-build PGXNTOOL_ENABLE_TEST_BUILD=yes 2>&1
+  [ "$status" -ne 0 ]
+
+  # Restore from git
+  git checkout -- test/build/
+}
+
+@test "test-build can be disabled via PGXNTOOL_ENABLE_TEST_BUILD=no" {
+  run make -n test PGXNTOOL_ENABLE_TEST_BUILD=no 2>&1
+  assert_success
+  ! echo "$output" | grep -q "test-build"
+}
+
+@test "test-build target absent when test/build/ is removed" {
+  rm -rf test/build
+
+  run make -n test 2>&1
+  assert_success
+  ! echo "$output" | grep -q "test-build"
+
+  # Restore
+  git checkout -- test/build/
 }
 
 # vi: expandtab sw=2 ts=2

@@ -1110,6 +1110,22 @@ Full suite would run foundation ~15 times. With state sharing:
 
 Only independent tests can run in parallel (future feature).
 
+## Template State Contract
+
+The template (`template/`) must always be in a **passing state**:
+- All SQL files have correct matching expected output files
+- `make test` in a fresh foundation works (aside from the known pgxntool-test.source gap)
+- Template tests (test/build/, test/install/, test/sql/) all produce correct output
+
+Tests leverage this known-good state to validate features without extra setup commands. This keeps tests fast and focused on what they're actually testing.
+
+## Minimizing Commands in Tests
+
+Every `make` invocation and shell command slows down tests. Prefer:
+- `make -n` (dry-run) over full `make` when checking target existence or dependencies
+- Combining related assertions into single tests where natural
+- Leveraging the template's known-good state instead of rebuilding it in each test
+
 ## Summary: Key Principles
 
 1. **Filename determines behavior**: `[0-9][0-9]-*.bats` = sequential rules apply
@@ -1120,6 +1136,8 @@ Only independent tests can run in parallel (future feature).
 6. **Prerequisites must be explicit**: Don't rely on implicit ordering
 7. **Always mark complete**: Even if tests fail, `teardown_file()` must run
 8. **Test the tests**: Changes to helpers.bash affect entire suite
+9. **Template must pass**: Template always in known-good state
+10. **Minimize commands**: Prefer `make -n` and combined checks
 
 When in doubt, read the code in:
 - `helpers.bash:detect_dirty_state()` - Pollution detection logic

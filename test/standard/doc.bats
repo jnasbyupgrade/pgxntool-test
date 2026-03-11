@@ -3,12 +3,12 @@
 # Test: Documentation generation
 #
 # Tests that asciidoc/asciidoctor documentation generation works correctly:
+# - ASCIIDOC_EXTS controls which extensions are processed
 # - ASCIIDOC='' should not create docs during install
 # - ASCIIDOC='' make html should fail
 # - make test should create docs
 # - make clean should not clean docs
 # - make docclean should clean docs
-# - ASCIIDOC_EXTS controls which extensions are processed
 
 load ../lib/helpers
 
@@ -75,6 +75,33 @@ setup() {
   fi
 }
 
+@test "documentation source files exist" {
+  # OK to fail: ls returns non-zero if no files match, which would mean test should fail
+  local doc_files=$(ls "$TEST_DIR/doc_repo/doc"/*.adoc "$TEST_DIR/doc_repo/doc"/*.asc "$TEST_DIR/doc_repo/doc"/*.asciidoc 2>/dev/null || echo)
+  [ -n "$doc_files" ]
+}
+
+@test "ASCIIDOC_EXTS='asc' processes only .asc files" {
+  cd "$TEST_DIR/doc_repo"
+
+  # Run before any other make html, so no cleanup needed
+  run env ASCIIDOC_EXTS='asc' make html
+  assert_success
+
+  local html=$(get_html "other.html")
+  local expected='doc/adoc_doc.html
+doc/asc_doc.html
+doc/asciidoc_doc.html'
+
+  check_html "$html" "$expected"
+
+  # Clean up after ourselves
+  run env ASCIIDOC_EXTS='asc' make docclean
+  assert_success
+  local html_after=$(get_html "other.html")
+  [ -z "$html_after" ]
+}
+
 @test "ASCIIDOC='' make install does not create docs" {
   cd "$TEST_DIR/doc_repo"
 
@@ -85,12 +112,6 @@ setup() {
   # Check no HTML files were created (except other.html which is pre-existing)
   local html=$(get_html "other.html")
   [ -z "$html" ]
-}
-
-@test "documentation source files exist" {
-  # OK to fail: ls returns non-zero if no files match, which would mean test should fail
-  local doc_files=$(ls "$TEST_DIR/doc_repo/doc"/*.adoc "$TEST_DIR/doc_repo/doc"/*.asc "$TEST_DIR/doc_repo/doc"/*.asciidoc 2>/dev/null || echo)
-  [ -n "$doc_files" ]
 }
 
 @test "ASCIIDOC='' make html fails" {
@@ -143,32 +164,6 @@ setup() {
   make docclean >/dev/null 2>&1
 
   # Check HTML files are gone
-  local html_after=$(get_html "other.html")
-  [ -z "$html_after" ]
-}
-
-@test "ASCIIDOC_EXTS='asc' processes only .asc files" {
-  cd "$TEST_DIR/doc_repo"
-
-  # Clean first
-  run make docclean
-  assert_success
-
-  # Generate with asc extension only
-  run env ASCIIDOC_EXTS='asc' make html
-  assert_success
-
-  # Should have adoc_doc.html, asc_doc.html, asciidoc_doc.html
-  local html=$(get_html "other.html")
-  local expected='doc/adoc_doc.html
-doc/asc_doc.html
-doc/asciidoc_doc.html'
-
-  check_html "$html" "$expected"
-
-  # Clean again
-  run env ASCIIDOC_EXTS='asc' make docclean
-  assert_success
   local html_after=$(get_html "other.html")
   [ -z "$html_after" ]
 }
