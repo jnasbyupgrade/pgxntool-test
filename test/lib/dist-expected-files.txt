@@ -49,17 +49,16 @@ test/build/expected/simple_build_test.out
 test/build/simple_build_test.sql
 test/deps.sql
 test/expected/
+test/expected/base.out
 test/expected/verify_install_marker.out
-test/input/
-test/input/pgxntool-test.source
 test/install/
 test/install/.gitignore
 test/install/create_install_marker.out
 test/install/create_install_marker.sql
-test/output/
-test/output/pgxntool-test.source
 test/pgxntool
 test/sql/
+test/sql/base.sql
+test/sql/pgxntool-test.sql
 test/sql/verify_install_marker.sql
 
 # pgxntool framework (the build system itself)
@@ -72,7 +71,6 @@ pgxntool/JSON.sh
 pgxntool/JSON.sh.LICENSE
 pgxntool/LICENSE
 pgxntool/lib.sh
-pgxntool/make_results.sh
 pgxntool/META.in.json
 pgxntool/control.mk.sh
 pgxntool/meta.mk.sh
