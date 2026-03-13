@@ -584,4 +584,25 @@ In a real extension, these would already exist before adding pgxntool."
   git commit -m "Ignore generated files (HTML documentation and meta.mk)"
 }
 
+# ============================================================================
+# FINAL VALIDATION - Ensure foundation is in a clean, fully-built state
+# ============================================================================
+#
+# This MUST be the last test in foundation. Other test suites copy the
+# foundation repo as their starting point. If the foundation tree is dirty
+# (untracked or modified files), those copies inherit the dirty state,
+# causing spurious failures in tests that expect a clean git working tree
+# (e.g., make dist requires a clean repo).
+
+@test "foundation repo is clean after full build" {
+  # Run make to ensure all generated files exist (HTML docs, meta.mk, etc.)
+  run make
+  assert_success
+
+  # Verify working tree is clean
+  run git status --porcelain
+  assert_success
+  [ -z "$output" ]
+}
+
 # vi: expandtab sw=2 ts=2
