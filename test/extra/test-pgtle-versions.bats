@@ -42,8 +42,8 @@ setup() {
 }
 
 @test "pgtle-versions: ensure pgTap is installed" {
-  # Ensure pgTap extension is installed
-  psql -X -c "CREATE EXTENSION IF NOT EXISTS pgtap SCHEMA tap;" >/dev/null 2>&1 || true
+  # Ensure pgTap extension is installed (create schema first since it may not exist)
+  psql -X -c "CREATE SCHEMA IF NOT EXISTS tap; CREATE EXTENSION IF NOT EXISTS pgtap SCHEMA tap;" >/dev/null 2>&1 || true
   
   # Verify pgTap is available
   run psql -X -tAc "SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname = 'pgtap');"

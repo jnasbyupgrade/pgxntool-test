@@ -42,6 +42,9 @@
       "Bash(git status:*)",
       "Bash(git submodule status:*)",
       "Bash(git worktree:*)",
+      "Bash(bash .claude/skills/test/scripts/*)",
+      "Bash(bash .claude/skills/commit/scripts/*)",
+      "Bash(.claude/skills/release/scripts/release-preflight.sh:*)",
 
       "Bash(make foundation:*)",
       "Bash(make html:*)",

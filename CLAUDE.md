@@ -30,6 +30,7 @@ These subagents are already available in your context - you don't need to discov
 ## Claude Skills and Commands
 
 The `/commit` skill lives in `.claude/skills/commit/` with a preprocessing script and format guide.
+The `/test` skill lives in `.claude/skills/test/` with a TAP-parsing test runner.
 Other commands (worktree, pr, pgxntool-update) remain in `.claude/commands/`.
 
 ## What This Repo Is
@@ -91,7 +92,13 @@ The test subagent is the authoritative source for:
 - Environment variables and helper functions
 - Critical rules (no parallel runs, no manual cleanup, etc.)
 
-Quick reference: `make test` runs the full test suite.
+**CRITICAL**: Always use the `/test` skill to run tests. Never run `make test*` or `bats` directly.
+The test skill parses output, tracks failures AND skips, and prevents dismissing problems.
+Quick reference: `/test` runs `test-all`. `/test test/standard/doc.bats` runs one test.
+
+**CRITICAL**: Tests CANNOT run in parallel. Never start a test run while another is in progress, even in background. The test skill enforces this with a lock file.
+
+**CRITICAL**: Test failures are NEVER acceptable. Any test failure - whether from a smoke test, verification run, or full suite - must be reported to the user immediately. Never rationalize failures as "pre-existing", "expected on this branch", or "unrelated." If failures exist, work with the user to fix them or plan commit order to avoid them.
 
 ### Template Design Principles
 

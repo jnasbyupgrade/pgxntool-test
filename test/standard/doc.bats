@@ -64,6 +64,11 @@ setup_file() {
   # Independent test - gets its own isolated environment with foundation TEST_REPO
   load_test_env "doc"
   ensure_foundation "$TEST_DIR"
+
+  # Remove doc_repo so setup() recreates it from the fresh foundation copy.
+  # "build works with no doc directory" destructively removes doc/, so manual
+  # reruns (bats test/standard/doc.bats) need a fresh start.
+  rm -rf "$TEST_DIR/doc_repo"
 }
 
 setup() {
@@ -116,6 +121,12 @@ doc/asciidoc_doc.html'
 
 @test "ASCIIDOC='' make html fails" {
   cd "$TEST_DIR/doc_repo"
+
+  # Remove generated HTML so make is forced to try rebuilding.
+  # Foundation runs `make` which pre-builds HTML; without removal,
+  # make sees targets as up-to-date and returns 0.
+  run make docclean
+  assert_success
 
   run env ASCIIDOC='' make html
   [ "$status" -ne 0 ]

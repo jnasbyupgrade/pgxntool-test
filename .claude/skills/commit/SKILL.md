@@ -6,7 +6,7 @@ description: |
   and executes two-phase commits with hash injection.
 
   Use when: "commit", "create commit", "commit changes", "/commit"
-allowed-tools: Bash(git status:*), Bash(git log:*), Bash(git add:*), Bash(git diff:*), Bash(git commit:*), Bash(git branch:*), Bash(bash .claude/skills/commit/scripts/*), Bash(make test:*), Read, Edit, Task
+allowed-tools: Bash(git status:*), Bash(git log:*), Bash(git add:*), Bash(git diff:*), Bash(git commit:*), Bash(git branch:*), Bash(bash .claude/skills/commit/scripts/*), Read, Edit, Task, Skill(test)
 ---
 
 # Commit Skill
@@ -27,7 +27,8 @@ Create git commits following project standards and safety protocols for pgxntool
 
 ### 1. Launch Tests (Background)
 
-Use Task tool to launch test subagent to run `make test` in background.
+Invoke the `/test` skill (runs `test-all` by default).
+The test skill runs in background, parses TAP output, and enforces strict pass/fail.
 Skip only if user explicitly says to.
 
 ### 2. Gather Repository Info
@@ -79,12 +80,12 @@ If only one repo has changes, show only that message (with note about other repo
 
 ### 6. Verify Tests Passed (MANDATORY)
 
-Check test subagent output for completion.
-- Look for ANY "not ok" lines
-- **If tests fail: STOP. Do NOT commit. Ask user what to do.**
-- There is NO such thing as an "acceptable" failing test
-- Do NOT rationalize failures as "pre-existing" or "unrelated"
-- Only proceed if ALL tests pass
+Check test skill output for completion.
+- Verify STATUS is `PASS` with zero skips
+- **If STATUS is `FAIL` or `PASS_WITH_SKIPS`: STOP. Do NOT commit. Ask user what to do.**
+- There is NO such thing as an "acceptable" failing or skipped test
+- Do NOT rationalize failures or skips as "pre-existing" or "unrelated"
+- Only proceed if STATUS is `PASS` with zero skips
 
 ### 7. Execute Two-Phase Commit
 
