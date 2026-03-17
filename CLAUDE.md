@@ -100,6 +100,24 @@ Quick reference: `/test` runs `test-all`. `/test test/standard/doc.bats` runs on
 
 **CRITICAL**: Test failures are NEVER acceptable. Any test failure - whether from a smoke test, verification run, or full suite - must be reported to the user immediately. Never rationalize failures as "pre-existing", "expected on this branch", or "unrelated." If failures exist, work with the user to fix them or plan commit order to avoid them.
 
+### State Modifications vs Tests
+
+Don't create `@test` blocks that *only* exist to modify state for later tests. If code doesn't test any pgxntool behavior, it belongs in `setup_file()` or a helper function, not a `@test`.
+
+Tests that legitimately validate behavior AND also modify state used by later tests are fine - add a comment noting which downstream tests depend on the modified state.
+
+Note: "state modifications" here means changes to an already-initialized test environment (updating deps.sql, committing files, etc.) - distinct from BATS `setup_file()`/`setup()` which handle test harness initialization (loading environments, checking prerequisites).
+
+**Why this matters:**
+- A skipped or failed `@test` looks like a real test problem. If it's just a state modification that wasn't needed, it creates false alarms and makes it unclear whether real test coverage is missing.
+- Pure state modifications can be freely restructured. But `@test` blocks that also test real behavior need careful treatment when modifying.
+
+**Rules:**
+1. **Pure state modifications** (git commits, sed edits, file creation solely to establish conditions for later tests): Move into `setup_file()` or helper functions. If they fail, they should ERROR (not skip), because downstream tests depend on them. Only create helper functions for code that's reused or complex enough to hurt readability inline.
+2. **Tests that also modify state** (e.g., `make results` to test that command works, where the output is also used by later tests): Keep as `@test`. Add a comment noting what downstream tests depend on the state change.
+3. **Never use `skip` for "already done" state modifications.** Make them idempotent with conditionals that simply don't re-run when unnecessary (no skip, no `@test`). Rebuilding state every time is too expensive, so reuse is important - but that logic belongs in non-test code.
+4. **Abort early on environment setup failures.** Since we never commit with failing tests, it's better to abort the suite immediately when environment setup fails rather than continuing and collecting potentially many false failures. A failed state modification can invalidate all downstream tests, and the false failures just obscure the real problem.
+
 ### Template Design Principles
 
 Tests should generally avoid making changes to template environments. Writing test code to modify the test environment is more complex than having the correct files in the template to begin with. Tests that depend on running `make test` inside a template should strongly consider having the template itself contain the necessary test SQL and expected output files.

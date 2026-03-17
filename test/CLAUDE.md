@@ -402,6 +402,63 @@ BATS executes test files via `bats-exec-file`, which starts with `set -eET` (err
 
 **Implication for setup code**: You do not need explicit exit status checks on every command in `setup_file` — errexit handles that. But if this isn't obvious in a given context, add a comment explaining the reliance on `set -e`.
 
+### State Modifications vs Tests
+
+Don't create `@test` blocks that *only* exist to modify state for later tests. If code doesn't test any pgxntool behavior, it belongs in `setup_file()` or a helper function, not a `@test`.
+
+Tests that legitimately validate behavior AND also modify state used by later tests are fine - add a comment noting which downstream tests depend on the modified state.
+
+**Important terminology:** "State modifications" here means changes to an already-initialized test environment (updating deps.sql, committing files, creating directories). This is distinct from BATS `setup_file()`/`setup()` which handle test harness initialization (loading environments, checking prerequisites, pollution detection). Both are "setup" in a general sense, but they serve different purposes and live in different places.
+
+**Three categories:**
+
+1. **Pure state modifications** (git commits, sed edits, file creation solely to establish conditions for later tests):
+   - Move into `setup_file()` or helper functions. Only create helpers for code that's reused or complex enough to hurt readability inline.
+   - If they fail, they should **error** (not skip) because downstream tests depend on them
+   - Make them idempotent with conditionals that simply don't re-run when unnecessary (no `skip`). Document why the guard exists.
+   - Can be freely restructured without losing test coverage
+
+2. **Tests that also modify state** (e.g., testing that `make results` works, where the output is also used by later tests):
+   - Keep as `@test` - they validate real pgxntool behavior
+   - Add a comment noting what downstream tests depend on the state change
+   - Should always run (never skip with "already done")
+
+3. **Pure tests** (validate behavior without affecting state for other tests):
+   - Standard `@test` blocks, no special considerations
+
+**Why this matters:**
+- A skipped or failed `@test` looks like a real test problem. If it's just a state modification that wasn't needed, it creates false alarms and makes it unclear whether real test coverage is missing.
+- Pure state modifications can be freely restructured. But `@test` blocks that also test real behavior need careful treatment when modifying.
+
+**Abort early on setup failures:** Since we never commit with failing tests, it's better to abort the suite immediately when a state modification fails rather than continuing and collecting potentially many false failures. A failed state modification can invalidate all downstream tests, and false failures just obscure the real problem. This is why state modifications should **error** on failure - under `set -e`, an error in `setup_file()` causes BATS to skip all tests in the file, which is exactly the right behavior.
+
+**Why not just reset state every time?** Rebuilding test environments is expensive and makes the suite unacceptably slow. Reusing state from previous runs is a deliberate performance optimization. The solution is to make state modifications idempotent in non-test code, not to add `skip "already done"` to test blocks.
+
+**Bad Example:**
+```bash
+# WRONG - @test that only exists to modify state
+@test "deps.sql can be updated with extension name" {
+  if grep -q "CREATE EXTENSION \"$EXTENSION_NAME\"" test/deps.sql; then
+    skip "deps.sql already updated"  # Skip hides whether this actually works
+  fi
+  sed -i '' -e "s/CREATE EXTENSION .../.../" test/deps.sql
+}
+```
+
+**Good Example:**
+```bash
+# CORRECT - state modification in setup_file (or a helper if complex/reused)
+setup_file() {
+  setup_sequential_test "03-setup-final" "02-dist"
+
+  # Idempotent: only modifies if not already done
+  if ! grep -q "CREATE EXTENSION \"$EXTENSION_NAME\"" "$TEST_REPO/test/deps.sql"; then
+    sed -i '' -e "s/CREATE EXTENSION .../.../" "$TEST_REPO/test/deps.sql"
+  fi
+  # Failure here errors (set -e), which is correct - later tests need this
+}
+```
+
 ### Never Use BATS `skip` Unless Explicitly Told
 
 **CRITICAL RULE:** You should never use BATS `skip` unless explicitly told to do so by the user.
