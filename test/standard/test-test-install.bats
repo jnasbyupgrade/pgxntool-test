@@ -49,14 +49,8 @@ setup() {
 @test "install marker state persists into main test suite" {
   skip_if_no_postgres
 
-  # pgxntool-test.source has no matching expected output file, which causes
-  # pg_regress to bail out before reaching verify_install_marker. Hide it so
-  # REGRESS only contains verify_install_marker (the test we actually care about).
-  mv test/input/pgxntool-test.source test/input/pgxntool-test.source.bak
-
   run make test
-
-  mv test/input/pgxntool-test.source.bak test/input/pgxntool-test.source
+  assert_success
 
   # Verify the specific marker test produced results and passed.
   assert_file_exists test/results/verify_install_marker.out

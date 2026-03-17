@@ -50,6 +50,7 @@ test/build/simple_build_test.sql
 test/deps.sql
 test/expected/
 test/expected/base.out
+test/expected/pgxntool-test.out
 test/expected/verify_install_marker.out
 test/install/
 test/install/.gitignore

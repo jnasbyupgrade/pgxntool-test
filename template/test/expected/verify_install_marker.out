@@ -18,7 +18,7 @@
  * from masking the failure it's designed to detect.
  */
 SELECT marker FROM pgxntool_install_marker;
- marker
+ marker 
 --------
  alive
 (1 row)
