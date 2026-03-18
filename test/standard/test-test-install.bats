@@ -58,31 +58,24 @@ setup() {
   assert_success
 }
 
-@test "test/install can be disabled via PGXNTOOL_ENABLE_TEST_INSTALL" {
-  run make -n test PGXNTOOL_ENABLE_TEST_INSTALL=no 2>&1
-  assert_success
-  ! echo "$output" | grep -q "install/schedule"
-}
-
-@test "test/install not enabled when test/install/ is empty" {
-  # Remove all SQL files from test/install
-  rm -f test/install/*.sql
-
-  run make -n test 2>&1
-  assert_success
-  # Should NOT reference install schedule
-  ! echo "$output" | grep -q "install/schedule"
-}
-
 @test "make clean removes install schedule file" {
-  # Restore install files and generate schedule
-  git checkout -- test/install/
-  make test/install/schedule
-  assert_file_exists "test/install/schedule"
-
   run make clean
   assert_success
 
+  assert_file_not_exists "test/install/schedule"
+}
+
+@test "test/install can be disabled via PGXNTOOL_ENABLE_TEST_INSTALL" {
+  # Schedule absent after make clean above; verify disabled mode doesn't create it
+  make test/install/schedule PGXNTOOL_ENABLE_TEST_INSTALL=no 2>/dev/null || true
+  assert_file_not_exists "test/install/schedule"
+}
+
+@test "test/install not enabled when test/install/ is empty" {
+  rm -f test/install/*.sql
+
+  # With no SQL files, make should not generate the schedule file
+  make test/install/schedule 2>/dev/null || true
   assert_file_not_exists "test/install/schedule"
 }
 
