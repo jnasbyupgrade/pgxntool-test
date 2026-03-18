@@ -2,15 +2,13 @@
 
 # Test: verify-results feature
 #
-# Tests that the verify-results feature works correctly:
-# - verify-results blocks make results when regression.diffs exists
-# - verify-results allows make results when no failures exist
-# - verify-results detects pgtap failures in result files
-# - verify-results can be disabled
+# Validates that verify-results correctly blocks make results when tests are
+# failing, detects pgtap failures, and can be disabled.
 #
-# This test is independent of whether PostgreSQL is running. It only
-# manipulates files that verify-results checks (regression.diffs and
-# result .out files).
+# Separate from make-results.bats because verify-results is pure file-checking
+# logic that doesn't require PostgreSQL. Keeping it in its own suite means these
+# tests always run, even when PostgreSQL is unavailable (make-results.bats skips
+# entirely in that case).
 
 load ../lib/helpers
 
@@ -26,13 +24,18 @@ setup() {
   cd "$TEST_REPO"
 }
 
-@test "verify-results succeeds when no test failures exist" {
-  # Template starts clean - no regression.diffs, no failing results
+@test "verify-results succeeds with clean template state" {
   run make verify-results
   assert_success
 }
 
-@test "verify-results fails when regression.diffs exists" {
+@test "verify-results has no dependencies on test execution" {
+  run make -n verify-results 2>&1
+  assert_success
+  assert_not_contains "$output" "installcheck"
+}
+
+@test "regression.diffs blocks both verify-results and make results" {
   cat > test/regression.diffs <<'EOF'
 *** test/expected/test.out
 --- test/results/test.out
@@ -44,19 +47,23 @@ setup() {
 EOF
 
   run make verify-results
-  [ "$status" -ne 0 ]
-  echo "$output" | grep -q "Tests are failing"
-  echo "$output" | grep -q "Cannot run 'make results'"
+  assert_failure
+  assert_contains "$output" "Tests are failing"
+  assert_contains "$output" "Cannot run 'make results'"
 
-  rm -f test/regression.diffs
+  # make results itself should also be blocked
+  run make results
+  assert_failure
+  assert_contains "$output" "Cannot run 'make results'"
+
+  # State left for next test (regression.diffs still present)
 }
 
-@test "verify-results blocks make results when tests are failing" {
-  echo "test failure" > test/regression.diffs
-
-  run make results
-  [ "$status" -ne 0 ]
-  echo "$output" | grep -q "Cannot run 'make results'"
+@test "verify-results can be disabled" {
+  # regression.diffs still present from previous test
+  run make -n results PGXNTOOL_ENABLE_VERIFY_RESULTS=no 2>&1
+  assert_success
+  assert_not_contains "$output" "verify-results"
 
   rm -f test/regression.diffs
 }
@@ -70,8 +77,8 @@ not ok 2 - failing test
 EOF
 
   run make verify-results
-  [ "$status" -ne 0 ]
-  echo "$output" | grep -q "pgtap failure detected"
+  assert_failure
+  assert_contains "$output" "pgtap failure detected"
 
   rm -f test/results/pgtap_fail.out
 }
@@ -99,30 +106,10 @@ ok 2 - test two
 EOF
 
   run make verify-results
-  [ "$status" -ne 0 ]
-  echo "$output" | grep -q "pgtap plan mismatch"
+  assert_failure
+  assert_contains "$output" "pgtap plan mismatch"
 
   rm -f test/results/pgtap_plan.out
-}
-
-@test "verify-results can be disabled" {
-  echo "test failure" > test/regression.diffs
-
-  # With verify-results disabled, results target should not block
-  # (it will still run 'make test' which may fail, but verify-results won't block)
-  run make -n results PGXNTOOL_ENABLE_VERIFY_RESULTS=no 2>&1
-  assert_success
-  ! echo "$output" | grep -q "verify-results"
-
-  rm -f test/regression.diffs
-}
-
-@test "verify-results has no dependencies" {
-  # verify-results should be fast - just file checks, no test execution
-  run make -n verify-results 2>&1
-  assert_success
-  # Should not trigger installcheck or test targets
-  ! echo "$output" | grep -q "installcheck"
 }
 
 # vi: expandtab sw=2 ts=2

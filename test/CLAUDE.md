@@ -499,6 +499,8 @@ assert_success
 - This makes it clear that the test environment needs to be set up correctly
 - Don't hide the problem with `skip`
 
+**Suite-level vs per-test skipping:** If most tests in a suite depend on something being available (PostgreSQL, pg_tle, etc.), skip the entire suite in `setup()` rather than calling `skip_if_no_*` in each individual `@test`. Per-test skip calls add complexity and overhead, and since we treat skips as failures there's little value in pushing hard to run the few tests that don't need the dependency. Put `skip_if_no_postgres` (or equivalent) in `setup()` and short-circuit the expensive parts of `setup_file()` with an early `return 0`. Only use per-test `skip_if_no_*` when a suite genuinely has a substantial number of tests that don't need the dependency.
+
 ### Never Ignore Result Codes in BATS Tests
 
 **CRITICAL RULE:** BATS tests must never ignore result codes (i.e., by doing `command || true`) unless there's a very explicit reason to do so (which must then be documented).
