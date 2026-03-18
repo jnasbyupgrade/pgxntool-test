@@ -172,7 +172,7 @@ setup() {
     rm -f "$ext_dir"/pgxntool-test*
   fi
 
-  # Ensure pg_tle extension is available (may have been affected by previous tests)
+  # Ensure pg_tle extension is installed in PostgreSQL (required for run-pgtle)
   if ! ensure_pgtle_extension; then
     skip "pg_tle extension cannot be created: $PGTLE_EXTENSION_ERROR"
   fi
