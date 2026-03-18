@@ -63,7 +63,11 @@ EOF
   # regression.diffs still present from previous test
   run make -n results PGXNTOOL_ENABLE_VERIFY_RESULTS=no 2>&1
   assert_success
-  assert_not_contains "$output" "verify-results"
+  # Check that verify-results recipe commands are not in the dry-run output.
+  # Note: we cannot check for the string "verify-results" directly because the
+  # test environment directory path contains "verify-results" and appears in
+  # make's "Entering directory" messages.
+  assert_not_contains "$output" "Cannot run 'make results'"
 
   rm -f test/regression.diffs
 }

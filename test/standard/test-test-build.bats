@@ -75,7 +75,11 @@ EOF
 @test "test-build can be disabled via PGXNTOOL_ENABLE_TEST_BUILD=no" {
   run make -n test PGXNTOOL_ENABLE_TEST_BUILD=no 2>&1
   assert_success
-  ! echo "$output" | grep -q "test-build"
+  # Check that run-test-build.sh recipe commands are not in the dry-run output.
+  # Note: we cannot check for the string "test-build" directly because the
+  # test environment directory path contains "test-build" and appears in
+  # make's "Entering directory" messages.
+  ! echo "$output" | grep -q "run-test-build.sh"
 }
 
 @test "test-build target absent when test/build/ is removed" {
@@ -83,7 +87,11 @@ EOF
 
   run make -n test 2>&1
   assert_success
-  ! echo "$output" | grep -q "test-build"
+  # Check that run-test-build.sh recipe commands are not in the dry-run output.
+  # Note: we cannot check for the string "test-build" directly because the
+  # test environment directory path contains "test-build" and appears in
+  # make's "Entering directory" messages.
+  ! echo "$output" | grep -q "run-test-build.sh"
 
   # Restore
   git checkout -- test/build/

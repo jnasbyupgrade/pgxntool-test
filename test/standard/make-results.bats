@@ -74,8 +74,10 @@ setup() {
 }
 
 @test "make results updates expected output" {
-  # Run make results to fix the expected output
-  # Disable verify-results since we intentionally created a mismatch to test this
+  # Run make results to fix the expected output.
+  # Must disable verify-results: the previous test created a mismatch, which caused
+  # make test to generate regression.diffs. verify-results blocks make results when
+  # regression.diffs exists, so we bypass it here to test the fix-mismatch workflow.
   run make PGXNTOOL_ENABLE_VERIFY_RESULTS=no results
   assert_success
 }

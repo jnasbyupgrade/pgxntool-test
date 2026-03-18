@@ -74,6 +74,8 @@ setup() {
 }
 
 @test "make test succeeds when output matches" {
+  skip_if_no_postgres
+
   # This should now pass since we copied the expected output
   run make test
   assert_success
