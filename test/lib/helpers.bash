@@ -1336,7 +1336,7 @@ wait_for_clean_worktree() {
     (cd "$repo_dir" && git update-index --refresh) >/dev/null 2>&1 || true
 
     # Check the exact conditions git subtree's ensure_clean uses
-    # (see /Library/Developer/CommandLineTools/usr/libexec/git-core/git-subtree):
+    # (see git-subtree source, e.g. $(git --exec-path)/git-subtree):
     #   git diff-index HEAD --exit-code --quiet  (working tree)
     #   git diff-index --cached HEAD --exit-code --quiet  (index)
     if (cd "$repo_dir" && git diff-index HEAD --exit-code --quiet 2>&1) &&
