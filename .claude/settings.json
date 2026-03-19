@@ -31,7 +31,7 @@
       "Bash(bash .claude/skills/test/scripts/*)",
       "Bash(bash .claude/skills/commit/scripts/*)",
       "Bash(.claude/skills/release/scripts/release-preflight.sh:*)",
-      "Bash(bash /Users/jnasby/git/pgxntool-test/.claude/skills/test/scripts/run-tests.sh:*)",
+      "Bash(bash .claude/skills/test/scripts/run-tests.sh:*)",
       "Bash(jq:*)",
       "Bash(ls:*)",
       "Bash(make foundation:*)",
