@@ -126,6 +126,12 @@ pgxntool-test/
 - **../pgxntool/** - The framework being tested
 - **../pgxntool-test-template/** - The minimal extension used as test subject
 
+## Shell Script Standards
+
+**RULE**: Always use `#!/usr/bin/env bash`, never `#!/bin/bash`.
+
+`/bin/bash` hardcodes the path and fails on systems where bash is elsewhere (some BSDs, NixOS, Homebrew on macOS). `#!/usr/bin/env bash` finds bash on `PATH` and works everywhere.
+
 ## General Guidelines
 
 - You should never have to run `rm -rf .envs`; the test system should always know how to handle .envs
