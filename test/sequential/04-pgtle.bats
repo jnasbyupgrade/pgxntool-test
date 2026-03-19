@@ -193,21 +193,23 @@ teardown_file() {
 
 @test "pgtle: control file change triggers rebuild" {
   make pgtle
-  local mtime1=$(stat -f %m pg_tle/1.5.0+/pgxntool-test.sql 2>/dev/null || stat -c %Y pg_tle/1.5.0+/pgxntool-test.sql)
+  # Use stat -c %Y (GNU/Linux) first, fall back to stat -f %m (BSD/macOS)
+  local mtime1=$(stat -c %Y pg_tle/1.5.0+/pgxntool-test.sql 2>/dev/null || stat -f %m pg_tle/1.5.0+/pgxntool-test.sql)
   sleep 1
   touch pgxntool-test.control
   make pgtle
-  local mtime2=$(stat -f %m pg_tle/1.5.0+/pgxntool-test.sql 2>/dev/null || stat -c %Y pg_tle/1.5.0+/pgxntool-test.sql)
+  local mtime2=$(stat -c %Y pg_tle/1.5.0+/pgxntool-test.sql 2>/dev/null || stat -f %m pg_tle/1.5.0+/pgxntool-test.sql)
   [ "$mtime2" -gt "$mtime1" ]
 }
 
 @test "pgtle: SQL file change triggers rebuild" {
   make pgtle
-  local mtime1=$(stat -f %m pg_tle/1.5.0+/pgxntool-test.sql 2>/dev/null || stat -c %Y pg_tle/1.5.0+/pgxntool-test.sql)
+  # Use stat -c %Y (GNU/Linux) first, fall back to stat -f %m (BSD/macOS)
+  local mtime1=$(stat -c %Y pg_tle/1.5.0+/pgxntool-test.sql 2>/dev/null || stat -f %m pg_tle/1.5.0+/pgxntool-test.sql)
   sleep 1
   touch sql/pgxntool-test--0.1.0.sql
   make pgtle
-  local mtime2=$(stat -f %m pg_tle/1.5.0+/pgxntool-test.sql 2>/dev/null || stat -c %Y pg_tle/1.5.0+/pgxntool-test.sql)
+  local mtime2=$(stat -c %Y pg_tle/1.5.0+/pgxntool-test.sql 2>/dev/null || stat -f %m pg_tle/1.5.0+/pgxntool-test.sql)
   [ "$mtime2" -gt "$mtime1" ]
 }
 

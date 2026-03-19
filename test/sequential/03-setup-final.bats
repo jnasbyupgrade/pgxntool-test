@@ -58,16 +58,17 @@ teardown_file() {
 }
 
 @test "deps.sql can be updated with extension name" {
-  # Check if already updated
-  if grep -q "CREATE EXTENSION \"$EXTENSION_NAME\"" test/deps.sql; then
-    skip "deps.sql already updated"
+  # Update deps.sql (portable sed: -i.bak + rm instead of BSD-only -i '')
+  local quote='"'
+  sed -i.bak -e "s/CREATE EXTENSION \.\.\..*/CREATE EXTENSION ${quote}$EXTENSION_NAME${quote};/" test/deps.sql
+  rm -f test/deps.sql.bak
+
+  # Commit if changed so the repo stays clean for subsequent tests and runs
+  if ! git diff --exit-code test/deps.sql >/dev/null 2>&1; then
+    git add test/deps.sql
+    git commit -m "Update deps.sql with extension name"
   fi
 
-  # Update deps.sql
-  local quote='"'
-  sed -i '' -e "s/CREATE EXTENSION \.\.\..*/CREATE EXTENSION ${quote}$EXTENSION_NAME${quote};/" test/deps.sql
-
-  # Verify change
   grep -q "CREATE EXTENSION \"$EXTENSION_NAME\"" test/deps.sql
 }
 
