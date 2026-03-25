@@ -28,6 +28,7 @@
       "Bash(gh pr list:*)",
       "Bash(gh pr view:*)",
       "Bash(gh repo view:*)",
+      "Bash(gh search commits:*)",
 
       "Bash(git branch:*)",
       "Bash(git checkout:*)",
@@ -45,7 +46,9 @@
       "Bash(git worktree:*)",
       "Bash(bash .claude/skills/test/scripts/*)",
       "Bash(bash .claude/skills/commit/scripts/*)",
-      "Bash(.claude/skills/release/scripts/release-preflight.sh:*)",
+      "Bash(bash .claude/skills/release/scripts/release-preflight.sh:*)",
+      "Bash(bash .claude/skills/test/scripts/run-tests.sh:*)",
+      "Bash(bash .claude/skills/commit/scripts/gather-repo-info.sh:*)",
       "Bash(bash .claude/skills/test/scripts/run-tests.sh:*)",
 
       "Bash(make foundation:*)",
