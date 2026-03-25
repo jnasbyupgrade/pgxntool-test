@@ -51,32 +51,7 @@ setup() {
   assert_dir_exists "test/output"
 }
 
-@test "can copy expected output file to test/output" {
-  # Ensure test/output directory exists (pg_regress doesn't create it)
-  mkdir -p test/output
-
-  local source_file="$TOPDIR/pgxntool-test.source"
-
-  # Skip if already copied
-  if [ -f "test/output/pgxntool-test.out" ]; then
-    skip "Output file already copied"
-  fi
-
-  # Skip if source doesn't exist
-  if [ ! -f "$source_file" ]; then
-    skip "Source file $source_file does not exist"
-  fi
-
-  # Copy and rename .source to .out
-  cp "$source_file" test/output/pgxntool-test.out
-
-  assert_file_exists "test/output/pgxntool-test.out"
-}
-
-@test "make test succeeds when output matches" {
-  skip_if_no_postgres
-
-  # This should now pass since we copied the expected output
+@test "make test succeeds" {
   run make test
   assert_success
 }

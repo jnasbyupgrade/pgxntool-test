@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # release-preflight.sh - Pre-flight checks for pgxntool release
 #
 # Validates both repositories are ready for release and outputs

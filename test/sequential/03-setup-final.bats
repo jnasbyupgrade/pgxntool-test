@@ -20,7 +20,8 @@ setup_file() {
   load_test_env "sequential"
   if ! grep -q "CREATE EXTENSION \"$EXTENSION_NAME\"" "$TEST_REPO/test/deps.sql"; then
     local quote='"'
-    sed -i '' -e "s/CREATE EXTENSION \.\.\..*/CREATE EXTENSION ${quote}$EXTENSION_NAME${quote};/" "$TEST_REPO/test/deps.sql"
+    sed -i.bak -e "s/CREATE EXTENSION \.\.\..*/CREATE EXTENSION ${quote}$EXTENSION_NAME${quote};/" "$TEST_REPO/test/deps.sql"
+    rm -f "$TEST_REPO/test/deps.sql.bak"
   fi
 
   debug 1 "<<< EXIT setup_file: 03-setup-final (PID=$$)"

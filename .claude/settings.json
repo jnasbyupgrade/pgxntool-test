@@ -18,6 +18,7 @@
 
       "Skill(building-claude-code-skills)",
       "Skill(claude-code-upgrade:building-claude-code-commands)",
+      "Skill(test)",
 
       "Bash(bash .claude/skills/commit/scripts/*)",
       "Bash(.claude/skills/release/scripts/release-preflight.sh:*)",
@@ -45,6 +46,7 @@
       "Bash(bash .claude/skills/test/scripts/*)",
       "Bash(bash .claude/skills/commit/scripts/*)",
       "Bash(.claude/skills/release/scripts/release-preflight.sh:*)",
+      "Bash(bash .claude/skills/test/scripts/run-tests.sh:*)",
 
       "Bash(make foundation:*)",
       "Bash(make html:*)",

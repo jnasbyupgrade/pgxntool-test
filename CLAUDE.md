@@ -149,10 +149,16 @@ pgxntool-test/
 
 **CRITICAL**: The template (`template/`) must always be in a **passing state**. This means:
 - All SQL files must have correct matching expected output files
-- `make test` in a fresh foundation repository must pass (aside from the known pgxntool-test.source gap)
+- `make test` in a fresh foundation repository must pass
 - Template tests (test/build/, test/install/, test/sql/) must all produce correct output
 
 **Why**: Tests leverage the template's known-good state to validate features. If the template starts broken, tests need extra setup commands to establish a working baseline, which makes tests slower and harder to understand.
+
+## Shell Script Standards
+
+**RULE**: Always use `#!/usr/bin/env bash`, never `#!/bin/bash`.
+
+`/bin/bash` hardcodes the path and fails on systems where bash is elsewhere (some BSDs, NixOS, Homebrew on macOS). `#!/usr/bin/env bash` finds bash on `PATH` and works everywhere.
 
 ## General Guidelines
 
