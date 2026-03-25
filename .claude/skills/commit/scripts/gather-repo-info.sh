@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -e
 
 # gather-repo-info.sh - Collect git info for commit preparation
