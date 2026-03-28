@@ -1298,6 +1298,87 @@ ensure_pgtle_extension() {
 }
 
 # ============================================================================
+# Git Worktree Helpers
+# ============================================================================
+
+# Wait for a git working tree to be clean as seen by `git diff-index`.
+#
+# git subtree add uses `git diff-index --quiet HEAD` to check for a clean tree.
+# Due to filesystem timestamp granularity, recently committed files can have
+# stat info that doesn't match the index cache, causing diff-index to report
+# false modifications (the "racy git" problem: https://git-scm.com/docs/racy-git).
+#
+# Rather than hoping a fixed `sleep 1` is enough, this function loops:
+# refresh the index, check diff-index, and if still dirty, sleep briefly
+# and retry until it passes or we hit a timeout.
+#
+# Usage:
+#   wait_for_clean_worktree "$repo_dir"
+#   wait_for_clean_worktree "$repo_dir" 10  # custom timeout in seconds
+#
+# Arguments:
+#   repo_dir: Path to the git repository
+#   timeout:  Maximum seconds to wait (default: 5)
+#
+# Returns 0 if the tree becomes clean, or calls error() on timeout.
+wait_for_clean_worktree() {
+  local repo_dir="$1"
+  local timeout="${2:-5}"
+  local interval="0.1"
+  local max_iterations=200  # Safety net in case sleep doesn't actually sleep
+
+  local start_time
+  start_time=$(date +%s)
+  local iterations=0
+
+  while true; do
+    # Refresh index stat cache to match current filesystem state
+    (cd "$repo_dir" && git update-index --refresh) >/dev/null 2>&1 || true
+
+    # Check the exact conditions git subtree's ensure_clean uses
+    # (see git-subtree source, e.g. $(git --exec-path)/git-subtree):
+    #   git diff-index HEAD --exit-code --quiet  (working tree)
+    #   git diff-index --cached HEAD --exit-code --quiet  (index)
+    if (cd "$repo_dir" && git diff-index HEAD --exit-code --quiet 2>&1) &&
+       (cd "$repo_dir" && git diff-index --cached HEAD --exit-code --quiet 2>&1); then
+      return 0
+    fi
+
+    iterations=$((iterations + 1))
+
+    # Check wall-clock time (not accumulated sleep time)
+    local now
+    now=$(date +%s)
+    local elapsed=$((now - start_time))
+
+    if [ "$elapsed" -ge "$timeout" ] || [ "$iterations" -ge "$max_iterations" ]; then
+      # Timed out - provide diagnostic info
+      out "ERROR: Working tree not clean after ${elapsed}s (${iterations} iterations):"
+      local porcelain
+      porcelain=$(cd "$repo_dir" && git status --porcelain)
+      out "$porcelain"
+      local diff_output
+      diff_output=$(cd "$repo_dir" && git diff-index HEAD)
+      out "diff-index HEAD:"
+      out "$diff_output"
+      error "wait_for_clean_worktree: timed out waiting for clean working tree in $repo_dir"
+    fi
+
+    # Detect if sleep isn't actually sleeping (interval treated as 0)
+    # and bump to 1s to avoid a tight spin loop
+    local before_sleep
+    before_sleep=$(date +%s)
+    sleep "$interval"
+    local after_sleep
+    after_sleep=$(date +%s)
+    if [ "$after_sleep" -eq "$before_sleep" ] && [ "$iterations" -gt 5 ]; then
+      debug 2 "wait_for_clean_worktree: sleep $interval appears ineffective, bumping to 1s"
+      interval=1
+    fi
+  done
+}
+
+# ============================================================================
 # Custom Template Repository Building
 # ============================================================================
 
@@ -1404,15 +1485,14 @@ build_test_repo_from_template() {
   }
 
   # Step 6: Add pgxntool
-  # Wait for filesystem timestamp granularity
-  sleep 1
-  (cd "$TEST_REPO" && git update-index --refresh) || {
-    error "build_test_repo_from_template: git update-index failed"
-  }
+  # git subtree add requires a completely clean working tree (it checks
+  # with git diff-index --quiet HEAD). Wait for the index to settle.
+  wait_for_clean_worktree "$TEST_REPO"
 
   # Check if pgxntool repo is dirty
+  # Note: Use -e instead of -d to handle git worktrees where .git is a file
   local source_is_dirty=0
-  if [ -d "$PGXNREPO/.git" ]; then
+  if [ -e "$PGXNREPO/.git" ]; then
     if [ -n "$(cd "$PGXNREPO" && git status --porcelain)" ]; then
       source_is_dirty=1
       local pgxn_branch

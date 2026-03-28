@@ -377,7 +377,25 @@ teardown_file() {
 }
 ```
 
-### 5. Test Behavior, Not Output Format
+### 5. Separate State Modifications from Tests
+
+Don't create `@test` blocks that *only* exist to modify state for later tests. If code doesn't test any pgxntool behavior, it belongs in `setup_file()` or a helper function, not a `@test`.
+
+Tests that legitimately validate behavior AND also modify state used by later tests are fine - add a comment noting which downstream tests depend on the modified state.
+
+"State modifications" means changes to an already-initialized test environment (updating deps.sql, committing files, etc.) - distinct from BATS `setup_file()`/`setup()` which handle test harness initialization.
+
+**Three categories:**
+
+- **Pure state modifications** (git commits, sed edits to establish conditions): Move into `setup_file()` or helper functions. Only create helpers for code that's reused or complex enough to hurt readability inline. If they fail, they should error - downstream tests depend on them.
+- **Tests that also modify state** (e.g., `make results` tests that command works AND creates files used by later tests): Keep as `@test`, but be aware they serve dual purposes.
+- **Pure tests** (validate behavior without affecting later tests): Standard `@test` blocks.
+
+**Why this matters:** A skipped or failed `@test` looks like a real problem even if it's just a state modification that wasn't needed. Keeping pure state modifications out of `@test` blocks eliminates this ambiguity. State modifications can be freely restructured; dual-purpose tests need care.
+
+Rebuilding test environments on every run is too expensive. Instead, make state modifications idempotent in non-test code rather than using `skip "already done"` in test blocks.
+
+### 6. Test Behavior, Not Output Format
 
 **Bad**:
 ```bash

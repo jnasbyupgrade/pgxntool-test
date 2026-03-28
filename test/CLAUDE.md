@@ -2,6 +2,31 @@
 
 This file provides guidance for AI assistants (like Claude Code) when working with the BATS test system in this directory.
 
+## Critical Performance Directive: Minimize Commands in Tests
+
+**Every command run in the test suite makes the entire suite longer and slower.** The test suite is already slow; do not make it worse.
+
+**ALWAYS try to reduce the number of commands.** Before adding any command to a test, ask: can this be eliminated by restructuring the test or fixing the template?
+
+Specific guidelines:
+- **Run the fewest commands possible** to verify a behavior
+- **Combine related assertions** into a single test rather than separate tests when both require the same setup
+- **Use `make -n` (dry run)** instead of the real target when you only need to check what would run
+- **Avoid redundant state setup**: if the previous test already put the environment in the right state, don't repeat it
+
+## Critical Template Quality Directive
+
+**Tests MUST be set up correctly by the template.** If the template is not in a good working state, it creates extra work in many tests and defeats the purpose of isolated test environments.
+
+The whole reason independent tests use isolated environments (one environment per test suite) is so one test suite can modify things freely without disrupting others. That isolation only works if the template starts in a clean, working state.
+
+**What "good working state" means:**
+- `make test` succeeds (or would succeed if PostgreSQL is running)
+- All expected output files exist and are correct
+- No workarounds are needed in tests to compensate for template deficiencies
+
+**Consequence**: If a test needs to work around a broken template (e.g., creating empty expected files, or needing `|| true` on `make test`), fix the template instead.
+
 ## Critical Architecture Understanding
 
 ### The Foundation and Sequential Test Pattern
@@ -377,6 +402,63 @@ BATS executes test files via `bats-exec-file`, which starts with `set -eET` (err
 
 **Implication for setup code**: You do not need explicit exit status checks on every command in `setup_file` — errexit handles that. But if this isn't obvious in a given context, add a comment explaining the reliance on `set -e`.
 
+### State Modifications vs Tests
+
+Don't create `@test` blocks that *only* exist to modify state for later tests. If code doesn't test any pgxntool behavior, it belongs in `setup_file()` or a helper function, not a `@test`.
+
+Tests that legitimately validate behavior AND also modify state used by later tests are fine - add a comment noting which downstream tests depend on the modified state.
+
+**Important terminology:** "State modifications" here means changes to an already-initialized test environment (updating deps.sql, committing files, creating directories). This is distinct from BATS `setup_file()`/`setup()` which handle test harness initialization (loading environments, checking prerequisites, pollution detection). Both are "setup" in a general sense, but they serve different purposes and live in different places.
+
+**Three categories:**
+
+1. **Pure state modifications** (git commits, sed edits, file creation solely to establish conditions for later tests):
+   - Move into `setup_file()` or helper functions. Only create helpers for code that's reused or complex enough to hurt readability inline.
+   - If they fail, they should **error** (not skip) because downstream tests depend on them
+   - Make them idempotent with conditionals that simply don't re-run when unnecessary (no `skip`). Document why the guard exists.
+   - Can be freely restructured without losing test coverage
+
+2. **Tests that also modify state** (e.g., testing that `make results` works, where the output is also used by later tests):
+   - Keep as `@test` - they validate real pgxntool behavior
+   - Add a comment noting what downstream tests depend on the state change
+   - Should always run (never skip with "already done")
+
+3. **Pure tests** (validate behavior without affecting state for other tests):
+   - Standard `@test` blocks, no special considerations
+
+**Why this matters:**
+- A skipped or failed `@test` looks like a real test problem. If it's just a state modification that wasn't needed, it creates false alarms and makes it unclear whether real test coverage is missing.
+- Pure state modifications can be freely restructured. But `@test` blocks that also test real behavior need careful treatment when modifying.
+
+**Abort early on setup failures:** Since we never commit with failing tests, it's better to abort the suite immediately when a state modification fails rather than continuing and collecting potentially many false failures. A failed state modification can invalidate all downstream tests, and false failures just obscure the real problem. This is why state modifications should **error** on failure - under `set -e`, an error in `setup_file()` causes BATS to skip all tests in the file, which is exactly the right behavior.
+
+**Why not just reset state every time?** Rebuilding test environments is expensive and makes the suite unacceptably slow. Reusing state from previous runs is a deliberate performance optimization. The solution is to make state modifications idempotent in non-test code, not to add `skip "already done"` to test blocks.
+
+**Bad Example:**
+```bash
+# WRONG - @test that only exists to modify state
+@test "deps.sql can be updated with extension name" {
+  if grep -q "CREATE EXTENSION \"$EXTENSION_NAME\"" test/deps.sql; then
+    skip "deps.sql already updated"  # Skip hides whether this actually works
+  fi
+  sed -i '' -e "s/CREATE EXTENSION .../.../" test/deps.sql
+}
+```
+
+**Good Example:**
+```bash
+# CORRECT - state modification in setup_file (or a helper if complex/reused)
+setup_file() {
+  setup_sequential_test "03-setup-final" "02-dist"
+
+  # Idempotent: only modifies if not already done
+  if ! grep -q "CREATE EXTENSION \"$EXTENSION_NAME\"" "$TEST_REPO/test/deps.sql"; then
+    sed -i '' -e "s/CREATE EXTENSION .../.../" "$TEST_REPO/test/deps.sql"
+  fi
+  # Failure here errors (set -e), which is correct - later tests need this
+}
+```
+
 ### Never Use BATS `skip` Unless Explicitly Told
 
 **CRITICAL RULE:** You should never use BATS `skip` unless explicitly told to do so by the user.
@@ -416,6 +498,8 @@ assert_success
 - The test should fail if PostgreSQL isn't running
 - This makes it clear that the test environment needs to be set up correctly
 - Don't hide the problem with `skip`
+
+**Suite-level vs per-test skipping:** If most tests in a suite depend on something being available (PostgreSQL, pg_tle, etc.), skip the entire suite in `setup()` rather than calling `skip_if_no_*` in each individual `@test`. Per-test skip calls add complexity and overhead, and since we treat skips as failures there's little value in pushing hard to run the few tests that don't need the dependency. Put `skip_if_no_postgres` (or equivalent) in `setup()` and short-circuit the expensive parts of `setup_file()` with an early `return 0`. Only use per-test `skip_if_no_*` when a suite genuinely has a substantial number of tests that don't need the dependency.
 
 ### Never Ignore Result Codes in BATS Tests
 
@@ -1096,6 +1180,22 @@ Full suite would run foundation ~15 times. With state sharing:
 
 Only independent tests can run in parallel (future feature).
 
+## Template State Contract
+
+The template (`template/`) must always be in a **passing state**:
+- All SQL files have correct matching expected output files
+- `make test` in a fresh foundation works (aside from the known pgxntool-test.source gap)
+- Template tests (test/build/, test/install/, test/sql/) all produce correct output
+
+Tests leverage this known-good state to validate features without extra setup commands. This keeps tests fast and focused on what they're actually testing.
+
+## Minimizing Commands in Tests
+
+Every `make` invocation and shell command slows down tests. Prefer:
+- `make -n` (dry-run) over full `make` when checking target existence or dependencies
+- Combining related assertions into single tests where natural
+- Leveraging the template's known-good state instead of rebuilding it in each test
+
 ## Summary: Key Principles
 
 1. **Filename determines behavior**: `[0-9][0-9]-*.bats` = sequential rules apply
@@ -1106,6 +1206,8 @@ Only independent tests can run in parallel (future feature).
 6. **Prerequisites must be explicit**: Don't rely on implicit ordering
 7. **Always mark complete**: Even if tests fail, `teardown_file()` must run
 8. **Test the tests**: Changes to helpers.bash affect entire suite
+9. **Template must pass**: Template always in known-good state
+10. **Minimize commands**: Prefer `make -n` and combined checks
 
 When in doubt, read the code in:
 - `helpers.bash:detect_dirty_state()` - Pollution detection logic

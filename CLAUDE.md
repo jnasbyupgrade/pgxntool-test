@@ -14,7 +14,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Subagents are automatically discovered and loaded at session start from:
 - `.claude/agents/*.md` - Specialized domain experts (invoked via Task tool)
-- `.claude/commands/*.md` - Command/skill handlers (invoked via Skill tool)
+- `.claude/skills/*/SKILL.md` - Skills with preprocessing scripts and guides (invoked via Skill tool)
+- `.claude/commands/*.md` - Simple command handlers (invoked via Skill tool)
 
 These subagents are already available in your context - you don't need to discover them. Just USE them whenever their expertise is relevant.
 
@@ -99,6 +100,24 @@ Quick reference: `/test` runs `test-all`. `/test test/standard/doc.bats` runs on
 
 **CRITICAL**: Test failures are NEVER acceptable. Any test failure - whether from a smoke test, verification run, or full suite - must be reported to the user immediately. Never rationalize failures as "pre-existing", "expected on this branch", or "unrelated." If failures exist, work with the user to fix them or plan commit order to avoid them.
 
+### State Modifications vs Tests
+
+Don't create `@test` blocks that *only* exist to modify state for later tests. If code doesn't test any pgxntool behavior, it belongs in `setup_file()` or a helper function, not a `@test`.
+
+Tests that legitimately validate behavior AND also modify state used by later tests are fine - add a comment noting which downstream tests depend on the modified state.
+
+Note: "state modifications" here means changes to an already-initialized test environment (updating deps.sql, committing files, etc.) - distinct from BATS `setup_file()`/`setup()` which handle test harness initialization (loading environments, checking prerequisites).
+
+**Why this matters:**
+- A skipped or failed `@test` looks like a real test problem. If it's just a state modification that wasn't needed, it creates false alarms and makes it unclear whether real test coverage is missing.
+- Pure state modifications can be freely restructured. But `@test` blocks that also test real behavior need careful treatment when modifying.
+
+**Rules:**
+1. **Pure state modifications** (git commits, sed edits, file creation solely to establish conditions for later tests): Move into `setup_file()` or helper functions. If they fail, they should ERROR (not skip), because downstream tests depend on them. Only create helper functions for code that's reused or complex enough to hurt readability inline.
+2. **Tests that also modify state** (e.g., `make results` to test that command works, where the output is also used by later tests): Keep as `@test`. Add a comment noting what downstream tests depend on the state change.
+3. **Never use `skip` for "already done" state modifications.** Make them idempotent with conditionals that simply don't re-run when unnecessary (no skip, no `@test`). Rebuilding state every time is too expensive, so reuse is important - but that logic belongs in non-test code.
+4. **Abort early on environment setup failures.** Since we never commit with failing tests, it's better to abort the suite immediately when environment setup fails rather than continuing and collecting potentially many false failures. A failed state modification can invalidate all downstream tests, and the false failures just obscure the real problem.
+
 ### Template Design Principles
 
 Tests should generally avoid making changes to template environments. Writing test code to modify the test environment is more complex than having the correct files in the template to begin with. Tests that depend on running `make test` inside a template should strongly consider having the template itself contain the necessary test SQL and expected output files.
@@ -117,7 +136,7 @@ pgxntool-test/
 ├── template/                 # Template extension files for test repos
 ├── tests/                    # Test suite (see test subagent for details)
 ├── test/bats/                # BATS framework (git submodule)
-├── .claude/                  # Claude subagents and commands
+├── .claude/                  # Claude subagents, skills, and commands
 └── .envs/                    # Test environments (gitignored)
 ```
 
@@ -125,6 +144,15 @@ pgxntool-test/
 
 - **../pgxntool/** - The framework being tested
 - **../pgxntool-test-template/** - The minimal extension used as test subject
+
+## Template Requirements
+
+**CRITICAL**: The template (`template/`) must always be in a **passing state**. This means:
+- All SQL files must have correct matching expected output files
+- `make test` in a fresh foundation repository must pass
+- Template tests (test/build/, test/install/, test/sql/) must all produce correct output
+
+**Why**: Tests leverage the template's known-good state to validate features. If the template starts broken, tests need extra setup commands to establish a working baseline, which makes tests slower and harder to understand.
 
 ## Shell Script Standards
 
@@ -138,3 +166,4 @@ pgxntool-test/
 - Do not hard code things that can be determined in other ways. For example, if we need to do something to a subset of files, look for ways to list the files that meet the specification
 - When documenting things avoid referring to the past, unless it's a major change. People generally don't need to know about what *was*, they only care about what we have now
 - NEVER use `echo ""` to print a blank line; just use `echo` with no arguments
+- Minimize commands in the test suite. Every `make` invocation and shell command slows down tests. Prefer `make -n` (dry-run) over full `make` when you only need to check target existence or dependencies. Combine related checks into single tests where natural. When multiple tests need the same state change (e.g., removing a directory), order them so the change happens once and subsequent tests ride on that state — don't remove/restore/remove again

@@ -172,6 +172,11 @@ setup() {
     rm -f "$ext_dir"/pgxntool-test*
   fi
 
+  # Ensure pg_tle extension is installed in PostgreSQL (required for run-pgtle)
+  if ! ensure_pgtle_extension; then
+    skip "pg_tle extension cannot be created: $PGTLE_EXTENSION_ERROR"
+  fi
+
   # Create an empty upgrade file (no-op upgrade from 0.1.1 to 0.1.2)
   touch "$TEST_REPO/sql/pgxntool-test--0.1.1--0.1.2.sql"
 

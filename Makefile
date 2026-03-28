@@ -110,7 +110,8 @@ clean: clean-envs
 # Note: This works on the pgxntool source repository, not test environments
 ASCIIDOC_CMD := $(shell which asciidoctor 2>/dev/null || which asciidoc 2>/dev/null)
 PGXNTOOL_SOURCE_DIR := $(shell cd $(CURDIR)/../pgxntool && pwd)
-.PHONY: readme
+.PHONY: html readme
+html: readme
 readme:
 ifndef ASCIIDOC_CMD
 	$(error Could not find "asciidoc" or "asciidoctor". Add one of them to your PATH)

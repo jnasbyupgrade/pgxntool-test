@@ -12,6 +12,18 @@ setup_file() {
   setup_sequential_test "03-setup-final" "02-dist"
 
   export EXTENSION_NAME="pgxntool-test"
+
+  # State modification: Update deps.sql with the real extension name.
+  # Later tests (and make test inside the repo) need deps.sql to reference
+  # the correct extension. Only modify if not already done - sed is cheap
+  # but we don't want to dirty the repo unnecessarily.
+  load_test_env "sequential"
+  if ! grep -q "CREATE EXTENSION \"$EXTENSION_NAME\"" "$TEST_REPO/test/deps.sql"; then
+    local quote='"'
+    sed -i.bak -e "s/CREATE EXTENSION \.\.\..*/CREATE EXTENSION ${quote}$EXTENSION_NAME${quote};/" "$TEST_REPO/test/deps.sql"
+    rm -f "$TEST_REPO/test/deps.sql.bak"
+  fi
+
   debug 1 "<<< EXIT setup_file: 03-setup-final (PID=$$)"
 }
 
@@ -57,18 +69,7 @@ teardown_file() {
   assert_success
 }
 
-@test "deps.sql can be updated with extension name" {
-  # Update deps.sql (portable sed: -i.bak + rm instead of BSD-only -i '')
-  local quote='"'
-  sed -i.bak -e "s/CREATE EXTENSION \.\.\..*/CREATE EXTENSION ${quote}$EXTENSION_NAME${quote};/" test/deps.sql
-  rm -f test/deps.sql.bak
-
-  # Commit if changed so the repo stays clean for subsequent tests and runs
-  if ! git diff --exit-code test/deps.sql >/dev/null 2>&1; then
-    git add test/deps.sql
-    git commit -m "Update deps.sql with extension name"
-  fi
-
+@test "deps.sql has correct extension name" {
   grep -q "CREATE EXTENSION \"$EXTENSION_NAME\"" test/deps.sql
 }
 

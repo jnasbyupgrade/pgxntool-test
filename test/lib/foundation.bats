@@ -225,34 +225,14 @@ In a real extension, these would already exist before adding pgxntool."
   # pgxntool should not exist yet - if it does, environment cleanup failed
   [ ! -d "pgxntool" ]
 
-  # CRITICAL: git subtree add requires a completely clean working tree.
-  # The command internally uses 'git diff-index --quiet HEAD' which can fail due to
-  # filesystem timestamp granularity causing stale index cache entries.
-  # See: https://git-scm.com/docs/git-status#_background_refresh
-  #
-  # Solution: Wait for filesystem timestamps to settle, then refresh git index cache
-  # to ensure accurate status reporting before git subtree add.
-
-  sleep 1  # Wait for filesystem timestamp granularity
-
-  run git update-index --refresh
-  assert_success
-
-  run git status --porcelain
-  assert_success
-
-  if [ -n "$output" ]; then
-    out "ERROR: Working tree must be clean for git subtree add:"
-    out "$output"
-    run git diff-index HEAD  # Show what git subtree will see
-    out "Files with index mismatches:"
-    out "$output"
-    error "Working tree has modifications, cannot proceed with git subtree add"
-  fi
+  # git subtree add requires a completely clean working tree (it checks
+  # with git diff-index --quiet HEAD). Wait for the index to settle.
+  wait_for_clean_worktree "$(pwd)"
 
   # Validate prerequisites before attempting git subtree
   # 1. Check PGXNREPO is accessible and safe
-  if [ ! -d "$PGXNREPO/.git" ]; then
+  # Use -e instead of -d: for git worktrees, .git is a file, not a directory
+  if [ ! -e "$PGXNREPO/.git" ]; then
     # Not a local directory - must be a valid remote URL
 
     # Explicitly reject dangerous protocols first
@@ -267,7 +247,7 @@ In a real extension, these would already exist before adding pgxntool."
   fi
 
   # 2. For local repos, verify branch exists
-  if [ -d "$PGXNREPO/.git" ]; then
+  if [ -e "$PGXNREPO/.git" ]; then
     if ! (cd "$PGXNREPO" && git rev-parse --verify "$PGXNBRANCH" >/dev/null 2>&1); then
       error "Branch $PGXNBRANCH does not exist in $PGXNREPO"
     fi
@@ -276,7 +256,7 @@ In a real extension, these would already exist before adding pgxntool."
   # 3. Check if source repo is dirty and use rsync if needed
   # This matches the legacy test behavior in tests/clone
   local source_is_dirty=0
-  if [ -d "$PGXNREPO/.git" ]; then
+  if [ -e "$PGXNREPO/.git" ]; then
     # SECURITY: rsync only works with local paths, never remote URLs
     if [[ "$PGXNREPO" == *://* ]]; then
       error "Cannot use rsync with remote URL: $PGXNREPO"

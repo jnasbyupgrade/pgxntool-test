@@ -40,13 +40,27 @@ sql/pgxntool-test.sql
 
 # Test files (root level, copied from t/)
 test/
+test/build/
+test/build/.gitignore
+test/build/build_check.sql
+test/build/expected/
+test/build/expected/build_check.out
+test/build/expected/simple_build_test.out
+test/build/simple_build_test.sql
 test/deps.sql
 test/expected/
 test/expected/base.out
+test/expected/pgxntool-test.out
+test/expected/verify_install_marker.out
+test/install/
+test/install/.gitignore
+test/install/create_install_marker.out
+test/install/create_install_marker.sql
 test/pgxntool
 test/sql/
 test/sql/base.sql
 test/sql/pgxntool-test.sql
+test/sql/verify_install_marker.sql
 
 # pgxntool framework (the build system itself)
 pgxntool/
@@ -62,9 +76,11 @@ pgxntool/META.in.json
 pgxntool/control.mk.sh
 pgxntool/meta.mk.sh
 pgxntool/pgtle.sh
+pgxntool/run-test-build.sh
 pgxntool/safesed
 pgxntool/setup.sh
 pgxntool/update-setup-files.sh
+pgxntool/verify-results-pgtap.sh
 pgxntool/WHAT_IS_THIS
 
 # pgxntool test infrastructure
