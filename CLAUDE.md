@@ -166,4 +166,4 @@ pgxntool-test/
 - Do not hard code things that can be determined in other ways. For example, if we need to do something to a subset of files, look for ways to list the files that meet the specification
 - When documenting things avoid referring to the past, unless it's a major change. People generally don't need to know about what *was*, they only care about what we have now
 - NEVER use `echo ""` to print a blank line; just use `echo` with no arguments
-- Minimize commands in the test suite. Every `make` invocation and shell command slows down tests. Prefer `make -n` (dry-run) over full `make` when you only need to check target existence or dependencies. Combine related checks into single tests where natural
+- Minimize commands in the test suite. Every `make` invocation and shell command slows down tests. Prefer `make -n` (dry-run) over full `make` when you only need to check target existence or dependencies. Combine related checks into single tests where natural. When multiple tests need the same state change (e.g., removing a directory), order them so the change happens once and subsequent tests ride on that state — don't remove/restore/remove again

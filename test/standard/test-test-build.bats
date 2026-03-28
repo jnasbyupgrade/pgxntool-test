@@ -60,18 +60,6 @@ EOF
   rm -rf test/build/sql
 }
 
-@test "PGXNTOOL_ENABLE_TEST_BUILD=yes errors when test/build/ is missing" {
-  # Remove test/build directory entirely
-  rm -rf test/build
-
-  # Explicitly enabling should error when directory has no files
-  run make test-build PGXNTOOL_ENABLE_TEST_BUILD=yes 2>&1
-  [ "$status" -ne 0 ]
-
-  # Restore from git
-  git checkout -- test/build/
-}
-
 @test "test-build can be disabled via PGXNTOOL_ENABLE_TEST_BUILD=no" {
   run make -n test PGXNTOOL_ENABLE_TEST_BUILD=no 2>&1
   assert_success
@@ -82,9 +70,24 @@ EOF
   ! echo "$output" | grep -q "run-test-build.sh"
 }
 
-@test "test-build target absent when test/build/ is removed" {
+# Tests below here remove test/build/; keep them last
+@test "PGXNTOOL_ENABLE_TEST_BUILD=yes errors when test/build/ is missing" {
   rm -rf test/build
 
+  # Explicitly enabling should error when directory has no files
+  run make test-build PGXNTOOL_ENABLE_TEST_BUILD=yes 2>&1
+  [ "$status" -ne 0 ]
+}
+
+@test "run-test-build.sh errors when no .sql files exist" {
+  # test/build/ still removed from previous test
+  run pgxntool/run-test-build.sh test
+  assert_failure
+  echo "$output" | grep -q "no .sql files found"
+}
+
+@test "test-build target absent when test/build/ is removed" {
+  # test/build/ still removed
   run make -n test 2>&1
   assert_success
   # Check that run-test-build.sh recipe commands are not in the dry-run output.
@@ -92,9 +95,6 @@ EOF
   # test environment directory path contains "test-build" and appears in
   # make's "Entering directory" messages.
   ! echo "$output" | grep -q "run-test-build.sh"
-
-  # Restore
-  git checkout -- test/build/
 }
 
 # vi: expandtab sw=2 ts=2
