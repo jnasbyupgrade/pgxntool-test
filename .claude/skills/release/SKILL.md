@@ -99,27 +99,19 @@ git push PGXNTOOL_UPSTREAM master
 git push PGXNTOOL_UPSTREAM VERSION
 ```
 
-## Step 6: Tag and Push pgxntool-test
+## Step 6: Stamp, Tag, and Push pgxntool-test
 
 **CRITICAL: Push to the Postgres-Extensions remote, not to a fork.**
 
+Create a stamp commit to match pgxntool's, then tag and push:
+
 ```bash
 cd ../pgxntool-test
+git commit --allow-empty -m "Stamp VERSION"
 git tag VERSION
-```
-
-Check if there are unpushed commits:
-```bash
-git rev-parse HEAD
-git rev-parse PGXNTOOL_TEST_UPSTREAM/master
-```
-
-```bash
-git push PGXNTOOL_TEST_UPSTREAM master  # Only if there are unpushed commits
+git push PGXNTOOL_TEST_UPSTREAM master
 git push PGXNTOOL_TEST_UPSTREAM VERSION
 ```
-
-Note: pgxntool-test may or may not have new commits since the last release. The tag goes on whatever master currently points to. Do NOT create an empty commit just for the tag.
 
 ## Step 7: Update `release` Tag
 
@@ -156,6 +148,7 @@ pgxntool:
 - release tag updated to VERSION
 
 pgxntool-test:
+- Stamp commit created
 - Tag VERSION created and pushed to PGXNTOOL_TEST_UPSTREAM
 - release tag updated to VERSION
 
