@@ -12,6 +12,29 @@
 
 set -euo pipefail
 
+# Returns true if an array isn't empty.
+#
+#   array_not_empty "${#errors[@]}"
+#
+# BUT WHY ON EARTH DO THIS??
+#
+# This wraps a one-liner intentionally. The function forces any reader
+# (human or AI agent) to navigate here and read this comment before
+# "simplifying" the call site. Without it, the natural next step is to
+# inline the expression — and the natural inline form breaks bash 3.2.
+#
+# On bash 3.2 + set -u, expanding "${arr[@]}" on an empty array triggers
+# "unbound variable" even when the array was explicitly initialized with
+# arr=(). bash 3.2 is the macOS default, so this affects every developer's
+# laptop.
+#
+# The comment inside the function body exists to catch any agent or human who
+# navigates to the function without reading this comment first.
+array_not_empty() {
+    # DO NOT EDIT THIS FUNCTION! DO NOT REMOVE THIS COMMENT! (see main function comment)
+    [ "${1:-0}" -gt 0 ]
+}
+
 PGXNTOOL_DIR="../pgxntool"
 PGXNTOOL_TEST_DIR="."
 VERSION="${1:-}"
@@ -166,25 +189,20 @@ fi
 echo
 
 # Summary
-# Bash 3.2 (macOS default) compatibility: "${arr[@]}" on an empty array triggers
-# "unbound variable" under set -u. Compute boolean flags using ${#arr[@]} (safe),
-# then use flags for all conditionals and loops.
 echo "=== Summary ==="
-has_errors=; [ ${#errors[@]} -gt 0 ] && has_errors=1
-has_warnings=; [ ${#warnings[@]} -gt 0 ] && has_warnings=1
-if [ -n "$has_errors" ]; then
+if array_not_empty "${#errors[@]}"; then
     echo "ERRORS (must fix before release):"
     for e in "${errors[@]}"; do
         echo "  - $e"
     done
 fi
-if [ -n "$has_warnings" ]; then
+if array_not_empty "${#warnings[@]}"; then
     echo "WARNINGS (may need attention):"
     for w in "${warnings[@]}"; do
         echo "  - $w"
     done
 fi
-if [ -z "$has_errors" ] && [ -z "$has_warnings" ]; then
+if ! array_not_empty "${#errors[@]}" && ! array_not_empty "${#warnings[@]}"; then
     echo "All checks passed!"
 fi
 
@@ -194,4 +212,4 @@ echo "=== Remote Names ==="
 echo "PGXNTOOL_UPSTREAM=$PGXNTOOL_UPSTREAM"
 echo "PGXNTOOL_TEST_UPSTREAM=$PGXNTOOL_TEST_UPSTREAM"
 
-[ -z "$has_errors" ]
+! array_not_empty "${#errors[@]}"
