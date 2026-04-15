@@ -12,6 +12,9 @@
 
 set -euo pipefail
 
+TOPDIR="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
+source "$TOPDIR/util.sh"
+
 PGXNTOOL_DIR="../pgxntool"
 PGXNTOOL_TEST_DIR="."
 VERSION="${1:-}"
@@ -167,19 +170,19 @@ echo
 
 # Summary
 echo "=== Summary ==="
-if [ ${#errors[@]} -gt 0 ]; then
+if array_not_empty "${#errors[@]}"; then
     echo "ERRORS (must fix before release):"
     for e in "${errors[@]}"; do
         echo "  - $e"
     done
 fi
-if [ ${#warnings[@]} -gt 0 ]; then
+if array_not_empty "${#warnings[@]}"; then
     echo "WARNINGS (may need attention):"
     for w in "${warnings[@]}"; do
         echo "  - $w"
     done
 fi
-if [ ${#errors[@]} -eq 0 ] && [ ${#warnings[@]} -eq 0 ]; then
+if ! array_not_empty "${#errors[@]}" && ! array_not_empty "${#warnings[@]}"; then
     echo "All checks passed!"
 fi
 
@@ -189,4 +192,4 @@ echo "=== Remote Names ==="
 echo "PGXNTOOL_UPSTREAM=$PGXNTOOL_UPSTREAM"
 echo "PGXNTOOL_TEST_UPSTREAM=$PGXNTOOL_TEST_UPSTREAM"
 
-[ ${#errors[@]} -eq 0 ]
+! array_not_empty "${#errors[@]}"

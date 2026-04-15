@@ -1,4 +1,4 @@
-#!/usr/env bash
+: "${TOPDIR:?TOPDIR must be set before sourcing test-tools.sh}"
 
 # This needs to be pulled in first because we over-ride some of what's in it!
 . $TOPDIR/util.sh
@@ -121,7 +121,7 @@ debug() {
 
 # Smart branch detection: if pgxntool-test is on a non-master branch,
 # automatically use the same branch from pgxntool if it exists
-if [ -z "$PGXNBRANCH" ]; then
+if [ -z "${PGXNBRANCH:-}" ]; then
   # Detect current branch of pgxntool-test
   TEST_HARNESS_BRANCH=$(git -C "$TOPDIR" symbolic-ref --short HEAD 2>/dev/null || echo "master")
   debug 9 "TEST_HARNESS_BRANCH=$TEST_HARNESS_BRANCH"
@@ -166,7 +166,5 @@ debug_vars 19 PG_LOCATION PGXNREPO TEST_REPO
 redirect
 
 #trap "echo PTD='$TEST_DIR' >&2; echo LOG='$LOG' >&2" EXIT
-
-#head_log 'from lib.sh'
 
 # vi: expandtab sw=2 ts=2
