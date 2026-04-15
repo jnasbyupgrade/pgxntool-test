@@ -107,6 +107,17 @@ teardown_file() {
   assert_success
 }
 
+@test "make clean does not remove generated config files" {
+  # META.json, meta.mk, and control.mk are distclean-only artifacts —
+  # they survive 'make clean'. Only 'make distclean' removes them.
+  run make clean
+  assert_success
+
+  assert_file_exists "META.json"
+  assert_file_exists "meta.mk"
+  assert_file_exists "control.mk"
+}
+
 @test "make html succeeds" {
   # Build documentation before dist. This is actually redundant since make dist
   # depends on html, but we test it explicitly to verify the workflow.
