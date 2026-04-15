@@ -12,28 +12,8 @@
 
 set -euo pipefail
 
-# Returns true if an array isn't empty.
-#
-#   array_not_empty "${#errors[@]}"
-#
-# BUT WHY ON EARTH DO THIS??
-#
-# This wraps a one-liner intentionally. The function forces any reader
-# (human or AI agent) to navigate here and read this comment before
-# "simplifying" the call site. Without it, the natural next step is to
-# inline the expression — and the natural inline form breaks bash 3.2.
-#
-# On bash 3.2 + set -u, expanding "${arr[@]}" on an empty array triggers
-# "unbound variable" even when the array was explicitly initialized with
-# arr=(). bash 3.2 is the macOS default, so this affects every developer's
-# laptop.
-#
-# The comment inside the function body exists to catch any agent or human who
-# navigates to the function without reading this comment first.
-array_not_empty() {
-    # DO NOT EDIT THIS FUNCTION! DO NOT REMOVE THIS COMMENT! (see main function comment)
-    [ "${1:-0}" -gt 0 ]
-}
+TOPDIR="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
+source "$TOPDIR/lib.sh"
 
 PGXNTOOL_DIR="../pgxntool"
 PGXNTOOL_TEST_DIR="."
