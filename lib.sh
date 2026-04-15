@@ -1,4 +1,4 @@
-#!/usr/env bash
+#!/usr/bin/env bash
 
 # This needs to be pulled in first because we over-ride some of what's in it!
 . $TOPDIR/util.sh

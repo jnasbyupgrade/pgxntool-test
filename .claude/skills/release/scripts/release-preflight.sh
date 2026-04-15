@@ -166,20 +166,25 @@ fi
 echo
 
 # Summary
+# Bash 3.2 (macOS default) compatibility: "${arr[@]}" on an empty array triggers
+# "unbound variable" under set -u. Compute boolean flags using ${#arr[@]} (safe),
+# then use flags for all conditionals and loops.
 echo "=== Summary ==="
-if [ ${#errors[@]} -gt 0 ]; then
+has_errors=; [ ${#errors[@]} -gt 0 ] && has_errors=1
+has_warnings=; [ ${#warnings[@]} -gt 0 ] && has_warnings=1
+if [ -n "$has_errors" ]; then
     echo "ERRORS (must fix before release):"
     for e in "${errors[@]}"; do
         echo "  - $e"
     done
 fi
-if [ ${#warnings[@]} -gt 0 ]; then
+if [ -n "$has_warnings" ]; then
     echo "WARNINGS (may need attention):"
     for w in "${warnings[@]}"; do
         echo "  - $w"
     done
 fi
-if [ ${#errors[@]} -eq 0 ] && [ ${#warnings[@]} -eq 0 ]; then
+if [ -z "$has_errors" ] && [ -z "$has_warnings" ]; then
     echo "All checks passed!"
 fi
 
@@ -189,4 +194,4 @@ echo "=== Remote Names ==="
 echo "PGXNTOOL_UPSTREAM=$PGXNTOOL_UPSTREAM"
 echo "PGXNTOOL_TEST_UPSTREAM=$PGXNTOOL_TEST_UPSTREAM"
 
-[ ${#errors[@]} -eq 0 ]
+[ -z "$has_errors" ]
