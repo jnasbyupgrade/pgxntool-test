@@ -1,5 +1,6 @@
-# This needs to be pulled in first because we over-ride some of what's in it!
 : "${TOPDIR:?TOPDIR must be set before sourcing lib.sh}"
+
+# This needs to be pulled in first because we over-ride some of what's in it!
 . $TOPDIR/util.sh
 
 # Returns true if an array isn't empty.
