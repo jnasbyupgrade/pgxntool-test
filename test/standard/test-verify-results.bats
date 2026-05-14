@@ -35,7 +35,11 @@ setup() {
   assert_not_contains "$output" "installcheck"
 }
 
-@test "regression.diffs blocks both verify-results and make results" {
+@test "regression.diffs blocks verify-results" {
+  # This test only verifies the verify-results target directly. The broader behavior
+  # of make results being blocked after a failing test run is tested in
+  # make-results.bats (which requires PostgreSQL) because the fix for the ordering
+  # bug means make results now runs make test first, requiring a live database.
   cat > test/regression.diffs <<'EOF'
 *** test/expected/test.out
 --- test/results/test.out
@@ -49,11 +53,6 @@ EOF
   run make verify-results
   assert_failure
   assert_contains "$output" "Tests are failing"
-  assert_contains "$output" "Cannot run 'make results'"
-
-  # make results itself should also be blocked
-  run make results
-  assert_failure
   assert_contains "$output" "Cannot run 'make results'"
 
   # State left for next test (regression.diffs still present)

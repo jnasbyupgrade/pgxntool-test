@@ -57,6 +57,37 @@ gather_info() {
     )
 }
 
+# check_debug_levels: scan pgxntool shell scripts for invalid debug levels.
+# Valid levels are single-digit (0-9) or multiples of 10 (10, 20, 30, ...).
+# Two-digit levels that are NOT multiples of 10 (e.g., 11, 22, 25) are flagged.
+check_debug_levels() {
+    local pgxntool_path="$1"
+    local found_invalid=0
+
+    while IFS= read -r -d '' sh_file; do
+        while IFS= read -r match; do
+            # Extract the level number from "debug NN"
+            local level
+            level=$(echo "$match" | grep -oE 'debug [0-9]+' | grep -oE '[0-9]+$')
+            # Skip single-digit levels (always valid)
+            [ ${#level} -le 1 ] && continue
+            # Flag multi-digit levels that are not multiples of 10
+            if [ $((level % 10)) -ne 0 ]; then
+                if [ "$found_invalid" -eq 0 ]; then
+                    echo "### SANITY: Invalid debug levels detected"
+                    found_invalid=1
+                fi
+                echo "  $sh_file: debug $level"
+            fi
+        done < <(grep -nE '\bdebug [0-9]+\b' "$sh_file" 2>/dev/null || true)
+    done < <(find "$pgxntool_path" -maxdepth 1 -name "*.sh" -print0 2>/dev/null)
+
+    if [ "$found_invalid" -eq 0 ]; then
+        echo "### SANITY: debug levels OK (all single-digit or multiples of 10)"
+    fi
+    echo
+}
+
 if [ $# -eq 0 ]; then
     echo "Usage: gather-repo-info.sh <repo-path> [<repo-path2> ...]" >&2
     exit 1
@@ -73,3 +104,9 @@ for repo in "$@"; do
     echo "---"
     echo
 done
+
+# Run debug level check for pgxntool (first arg is expected to be pgxntool path)
+if [ $# -ge 1 ] && [ -f "$1/lib.sh" ]; then
+    echo "## Sanity Checks"
+    check_debug_levels "$1"
+fi

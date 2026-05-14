@@ -232,7 +232,7 @@ DEBUG=2 test/bats/bin/bats tests/01-meta.bats  # Debug output
 test/bats/bin/bats --verbose tests/01-meta.bats  # BATS verbose mode
 ```
 
-**Debug levels**: 10 (critical), 20 (significant), 30 (general), 40 (verbose), 50+ (maximum)
+**Debug levels (BATS test infrastructure, `helpers.bash`)**: 1 (critical/pollution detection), 2 (test flow/major ops), 3 (state detail), 5 (maximum). Note: this 1–5 scale is separate from the pgxntool lib.sh `debug` function which uses multiples of 10 (30=general, 40=verbose, 50=maximum). The two systems are independent.
 
 ---
 
@@ -247,7 +247,7 @@ Tests set these automatically (from `tests/helpers.bash`):
 - `PGXNBRANCH` - Branch to use (defaults to `master`)
 - `TEST_TEMPLATE` - Template directory (defaults to `${TOPDIR}/template`)
 - `PG_LOCATION` - PostgreSQL installation path
-- `DEBUG` - Debug level (0-5)
+- `DEBUG` - Debug level for BATS test helpers (0–5 scale)
 
 ---
 

@@ -16,9 +16,10 @@
 # - sql/ext_beta.sql
 # - META.in.json (with provides for both extensions)
 #
-# Note: ext_beta.control intentionally has a trailing comment on default_version.
-# This exercises pgtle.sh's parse_control_file to catch the quote-before-comment bug
-# (issue #25). Do not remove the comment from ext_beta.control.
+# Note: ext_beta.control intentionally has MULTIPLE spaces before the trailing comment
+# on default_version. This exercises parse_control_file's whitespace trimming to catch
+# both the single-space-only bug (issue #25) and the multiple-spaces bug (issue #26).
+# Do not reduce the spaces or remove the comment from ext_beta.control.
 
 load ../lib/helpers
 
@@ -112,8 +113,9 @@ setup() {
   run make all
   assert_success
 
-  # Also verify pgtle generation works — ext_beta.control has a trailing comment on
-  # default_version to exercise parse_control_file's comment handling (issue #25).
+  # Also verify pgtle generation works — ext_beta.control has multiple spaces before
+  # a trailing comment on default_version to exercise parse_control_file whitespace
+  # trimming (issues #25, #26).
   run make pgtle
   assert_success
 }

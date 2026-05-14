@@ -11,8 +11,6 @@
 # Not tested here:
 # - make results when already up-to-date (idempotent case). Safe to re-run,
 #   but the extra make test invocation adds non-trivial time for little value.
-# - verify-results behavior (blocking make results when tests fail) is tested
-#   separately in test-verify-results.bats.
 
 load ../lib/helpers
 
@@ -73,11 +71,21 @@ setup() {
   [ -d "test/output" ] || echo "$output" | grep -q "diff"
 }
 
+@test "make results is blocked by verify-results when tests fail" {
+  # The previous test ran make test which failed (mismatch), creating regression.diffs.
+  # With the fixed ordering (results: test verify-results), make results re-runs
+  # make test first (still fails → regression.diffs), then verify-results blocks.
+  # This test verifies that verify-results correctly intercepts failing results.
+  run make results
+  assert_failure
+  assert_contains "$output" "Cannot run 'make results'"
+}
+
 @test "make results updates expected output" {
-  # Run make results to fix the expected output.
-  # Must disable verify-results: the previous test created a mismatch, which caused
-  # make test to generate regression.diffs. verify-results blocks make results when
-  # regression.diffs exists, so we bypass it here to test the fix-mismatch workflow.
+  # Run make results with verify-results disabled to actually fix the mismatch.
+  # regression.diffs still exists from the previous test's make test run.
+  # Disabling verify-results lets make results run make test and copy the fresh
+  # results to expected/, fixing the mismatch.
   run make PGXNTOOL_ENABLE_VERIFY_RESULTS=no results
   assert_success
 }
