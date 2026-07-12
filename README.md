@@ -95,6 +95,59 @@ Tests are organized by filename pattern:
 
 Each test file automatically runs its prerequisites if needed, so they can be run individually or as a suite.
 
+## CI and Contributing
+
+### Why two repos?
+
+`pgxntool` is the framework itself; `pgxntool-test` is the test harness for it. They are kept separate because `pgxntool` is embedded into extension projects via `git subtree` — you don't want test infrastructure polluting those projects. The CI is designed to coordinate changes across both repos.
+
+A pgxntool change **should almost always have a corresponding test change** in pgxntool-test. Commits touching only pgxntool (with no test changes) should be rare. It is also normal and common to have commits that only touch pgxntool-test (e.g., improving test coverage) with no corresponding pgxntool change — as long as tests pass, that's fine.
+
+### PR conventions
+
+When your change requires modifications to both repos, open PRs in **both repos using the same branch name**. For example, if your feature branch is named `feature/add-pgtle-support`, create that branch in both `pgxntool` and `pgxntool-test`. **Branch names must match exactly** — the CI uses the branch name to find the paired PR.
+
+### How CI works
+
+**When you open a PR in `pgxntool-test`:**
+CI checks whether `pgxntool` has a branch with the same name. If it does, tests run against that pgxntool branch. If not, tests run against `pgxntool/master`. Results appear directly on your pgxntool-test PR.
+
+**When you open a PR in `pgxntool`:**
+CI waits for the paired pgxntool-test PR's CI to complete (polling for up to 20 minutes), then checks whether it passed. pgxntool CI does not run tests itself — it relies entirely on the pgxntool-test CI results.
+
+- **If a paired test PR is found and its CI passes**: pgxntool CI passes. There is no test duplication.
+- **If no paired test PR is found**: pgxntool CI fails (see below).
+
+### What to do when pgxntool CI fails with "No paired test PR found"
+
+This failure means CI couldn't find an open PR in pgxntool-test with a matching branch name. The fix is almost always:
+
+1. **Open a PR in pgxntool-test** from a branch with the **same name** as your pgxntool branch.
+2. Re-run the failing CI check on your pgxntool PR (or push a new commit to trigger it).
+
+**Branch names must match exactly.** If your pgxntool branch is `fix/parse-bug`, your pgxntool-test branch must also be `fix/parse-bug`.
+
+### The `commit-with-no-tests` label
+
+For pgxntool PRs that genuinely don't require any test changes (documentation fixes, comment updates, etc.), a maintainer can apply the `commit-with-no-tests` label. This tells CI to run tests against `pgxntool-test/master` directly.
+
+**This is not a normal shortcut.** Most pgxntool changes touch behavior that tests must cover. This label is for the rare case where a pgxntool change is truly orthogonal to the test suite.
+
+**This label is write-protected**: only maintainers with write access to the repository can add or remove it. If a non-maintainer applies it, an automated workflow removes it immediately and posts an explanation.
+
+To request the label:
+1. Open your pgxntool PR.
+2. Leave a comment explaining why no test changes are needed.
+3. A maintainer will review and apply the label if appropriate.
+
+### Branch protection
+
+The `check-test-pr` status check on pgxntool is a required check for merging to `master`. It only passes when either:
+- A corresponding pgxntool-test PR exists (with a matching branch name) and its tests are **passing**, or
+- A maintainer has applied the `commit-with-no-tests` label.
+
+This ensures pgxntool changes cannot be merged without passing test coverage.
+
 ## Development
 
 See [CLAUDE.md](CLAUDE.md) for detailed development guidelines and architecture documentation.

@@ -2,6 +2,36 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## CI Monitoring After Every Push
+
+**REQUIRED**: After every `git push`, immediately start a background task to
+monitor the CI run for that push. If you pushed to both pgxntool and
+pgxntool-test, start a background task for each repo — do not monitor them
+sequentially.
+
+Always use the `/ci` skill (`bash .claude/skills/ci/scripts/monitor-ci.sh`).
+Pass the exact push SHA when available — `gh run list --branch` has a race
+condition: if two pushes land close together on the same branch (e.g., two
+Claude sessions pushing in parallel), `--branch` may pick up the wrong run.
+`--commit SHA` targets the exact push and avoids this.
+
+**After every monitor run, check the `=== BRANCHES: pgxntool=X
+pgxntool-test=Y ===` line** to verify the right code is under test. If the
+branches don't match what you pushed, cancel the run and re-trigger.
+
+## Multiple Concurrent Sessions
+
+It is common to have multiple Claude Code sessions open simultaneously across
+pgxntool and pgxntool-test. To avoid cross-session interference:
+
+**If you are asked to do something on an existing PR that you did not open or
+are not already working on in this session, immediately ask for confirmation
+before proceeding.** For example: "I see PR #21 exists. Were you asking me to
+work on that, or did you mean to send this to a different session?"
+
+This applies to: editing PR branches, pushing to them, closing/reopening them,
+adding commits, modifying PR descriptions, or any other PR-level action.
+
 ## Git Commit Guidelines
 
 **CRITICAL**: Never attempt to commit changes on your own initiative. Always wait for explicit user instruction to commit. Even if you detect issues (like out-of-date files), inform the user and let them decide when to commit.
