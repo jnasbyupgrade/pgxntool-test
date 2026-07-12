@@ -1,0 +1,64 @@
+name: CI
+
+permissions:
+  contents: read        # required by actions/checkout in the reusable test workflow
+
+concurrency:
+  group: ci-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    # We use 'pull_request' (not 'pull_request_target') deliberately.
+    # 'pull_request_target' runs with write access to the base repo, which is
+    # a security risk for untrusted fork code. Since this workflow only reads
+    # from other public repos (no secrets needed), 'pull_request' is correct
+    # and safe even for fork PRs.
+
+jobs:
+  resolve:
+    name: Resolve pgxntool branch
+    runs-on: ubuntu-latest
+    outputs:
+      pgxntool-ref: ${{ steps.pgxntool-ref.outputs.ref }}
+
+    steps:
+      - name: Resolve pgxntool branch
+        id: pgxntool-ref
+        # PR-controlled values (head_ref) are passed via env, never interpolated
+        # directly into the script, to avoid shell injection.
+        env:
+          BRANCH: ${{ github.head_ref }}
+          REPO_OWNER: ${{ github.repository_owner }}
+        run: |
+          # Reject anything that isn't a valid git branch name before using it.
+          git check-ref-format --branch "$BRANCH" >/dev/null 2>&1 || {
+            echo "Invalid branch name: $BRANCH" >&2
+            exit 1
+          }
+
+          # Check whether pgxntool has a branch with the same name as this PR.
+          # If it does, use it — changes in this test PR may depend on changes
+          # in a paired pgxntool branch. If not, fall back to master.
+          #
+          # --exit-code makes git ls-remote return non-zero when the ref is
+          # absent, so we can branch on the result cleanly without parsing output.
+          if git ls-remote --exit-code --heads \
+               "https://github.com/${REPO_OWNER}/pgxntool.git" \
+               "refs/heads/${BRANCH}" > /dev/null 2>&1; then
+            echo "ref=${BRANCH}" >> "$GITHUB_OUTPUT"
+            echo "=== BRANCHES: pgxntool-test=${BRANCH} pgxntool=${BRANCH} ==="
+          else
+            echo "ref=master" >> "$GITHUB_OUTPUT"
+            echo "=== BRANCHES: pgxntool-test=${BRANCH} pgxntool=master (branch not found in pgxntool) ==="
+          fi
+
+  test:
+    needs: resolve
+    # run-tests.yml is the single source of truth for all test steps.
+    # See .github/workflows/CLAUDE.md for architecture notes, including
+    # the cross-repo reusable workflow tradeoffs and merge order constraints.
+    uses: ./.github/workflows/run-tests.yml
+    with:
+      pgxntool-branch: ${{ needs.resolve.outputs.pgxntool-ref }}
+      pgxntool-test-ref: ${{ github.sha }}

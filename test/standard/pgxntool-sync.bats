@@ -165,11 +165,13 @@ setup() {
 @test "make sync targets wire to the expected repo and ref" {
   local upstream="https://github.com/Postgres-Extensions/pgxntool.git"
 
-  # Match the full script-invocation line for each target. We pull that line out
-  # of `make -n` with grep rather than matching all of $output: when the suite
-  # runs under `make test-all`, the nested make also prints "Entering/Leaving
-  # directory" bookkeeping, which is noise for this check. Only the recipe line
-  # contains "pgxntool-sync.sh", so grep isolates it exactly.
+  # Match the full script-invocation line for each target. We grep the
+  # pgxntool-sync.sh line out of `make -n` rather than matching all of $output:
+  # when the suite runs under `make test`/`make test-all`, bats runs as a child
+  # of make, so the nested `make -n` prints "Entering/Leaving directory"
+  # bookkeeping. Only the recipe line contains "pgxntool-sync.sh", so grep
+  # isolates it exactly. The bare target passes no args (the script supplies the
+  # default repo/ref itself).
   local cmd
 
   run make -n pgxntool-sync
