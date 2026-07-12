@@ -225,4 +225,36 @@ setup() {
   [ -L test/pgxntool ]
 }
 
+# =============================================================================
+# Regression (issue #38): must work inside a git worktree
+# =============================================================================
+# In a linked worktree, `.git` is a file (a gitdir: pointer), not a directory.
+# The old `[ -d .git ]` root guard rejected valid worktrees with "Not in a git
+# repository." Run the script from inside a worktree of the test repo and
+# confirm it gets past the guard and does its normal work.
+
+@test "runs inside a git worktree where .git is a file" {
+  local old_commit
+  old_commit=$(git log -1 --format=%H -- pgxntool/)
+
+  local wt="$TEST_DIR/worktree-38"
+  # Idempotent: clear any leftover from a prior interrupted run before adding.
+  rm -rf "$wt"
+  git worktree prune
+  run git worktree add --quiet "$wt" HEAD
+  assert_success
+
+  [ -f "$wt/.git" ]  # sanity: worktree marker really is a file, not a directory
+
+  cd "$wt"
+  run pgxntool/update-setup-files.sh "$old_commit"
+  # Remove the worktree before asserting so a failure can't leave it registered.
+  cd "$TEST_REPO"
+  git worktree remove --force "$wt"
+
+  assert_success
+  # Reached the real work instead of dying on the repo-root guard.
+  assert_contains "$output" "Checking setup files for updates"
+}
+
 # vi: expandtab sw=2 ts=2

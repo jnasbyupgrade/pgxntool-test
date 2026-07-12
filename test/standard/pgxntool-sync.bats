@@ -165,23 +165,32 @@ setup() {
 @test "make sync targets wire to the expected repo and ref" {
   local upstream="https://github.com/Postgres-Extensions/pgxntool.git"
 
-  # Each target prints exactly one command; match it in full. The bare target
-  # passes no args (the script supplies the default repo/ref itself).
+  # Match the full script-invocation line for each target. We pull that line out
+  # of `make -n` with grep rather than matching all of $output: when the suite
+  # runs under `make test-all`, the nested make also prints "Entering/Leaving
+  # directory" bookkeeping, which is noise for this check. Only the recipe line
+  # contains "pgxntool-sync.sh", so grep isolates it exactly.
+  local cmd
+
   run make -n pgxntool-sync
   assert_success
-  [ "$output" = "pgxntool/pgxntool-sync.sh" ]
+  cmd=$(printf '%s\n' "$output" | grep 'pgxntool-sync\.sh')
+  [ "$cmd" = "pgxntool/pgxntool-sync.sh" ]
 
   run make -n pgxntool-sync-master
   assert_success
-  [ "$output" = "pgxntool/pgxntool-sync.sh $upstream master" ]
+  cmd=$(printf '%s\n' "$output" | grep 'pgxntool-sync\.sh')
+  [ "$cmd" = "pgxntool/pgxntool-sync.sh $upstream master" ]
 
   run make -n pgxntool-sync-local
   assert_success
-  [ "$output" = "pgxntool/pgxntool-sync.sh ../pgxntool release" ]
+  cmd=$(printf '%s\n' "$output" | grep 'pgxntool-sync\.sh')
+  [ "$cmd" = "pgxntool/pgxntool-sync.sh ../pgxntool release" ]
 
   run make -n pgxntool-sync-local-master
   assert_success
-  [ "$output" = "pgxntool/pgxntool-sync.sh ../pgxntool master" ]
+  cmd=$(printf '%s\n' "$output" | grep 'pgxntool-sync\.sh')
+  [ "$cmd" = "pgxntool/pgxntool-sync.sh ../pgxntool master" ]
 
   # The script's built-in default (used by bare `pgxntool-sync`) must be the
   # canonical repo on the release tag, not the old decibel remote.
