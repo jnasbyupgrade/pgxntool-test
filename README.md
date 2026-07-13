@@ -105,27 +105,29 @@ A pgxntool change **should almost always have a corresponding test change** in p
 
 ### PR conventions
 
-When your change requires modifications to both repos, open PRs in **both repos using the same branch name**. For example, if your feature branch is named `feature/add-pgtle-support`, create that branch in both `pgxntool` and `pgxntool-test`. **Branch names must match exactly** — the CI uses the branch name to find the paired PR.
+When your change requires modifications to both repos, open PRs in **both repos from a branch with the same name, on the same GitHub account** (your fork). For example, if your feature branch is named `feature/add-pgtle-support`, push it to both your `pgxntool` and `pgxntool-test` forks and open a PR from each. **The branch name *and* the account must match** — CI pairs the two PRs using both.
 
 ### How CI works
 
 **When you open a PR in `pgxntool-test`:**
-CI checks whether `pgxntool` has a branch with the same name. If it does, tests run against that pgxntool branch. If not, tests run against `pgxntool/master`. Results appear directly on your pgxntool-test PR.
+CI looks for a `pgxntool` branch with the same name **on your account** (the PR's head fork). If it exists, tests run against that branch; if not, they run against `pgxntool` master **from Postgres-Extensions**. Results appear directly on your pgxntool-test PR.
 
 **When you open a PR in `pgxntool`:**
-CI waits for the paired pgxntool-test PR's CI to complete (polling for up to 20 minutes), then checks whether it passed. pgxntool CI does not run tests itself — it relies entirely on the pgxntool-test CI results.
+CI waits for the paired pgxntool-test PR (matched by branch name **and** account) to complete (polling for up to 20 minutes), then checks whether it passed. pgxntool CI does not run tests itself — it relies entirely on the pgxntool-test CI results.
 
 - **If a paired test PR is found and its CI passes**: pgxntool CI passes. There is no test duplication.
 - **If no paired test PR is found**: pgxntool CI fails (see below).
 
+> **Fork contributors — security note:** CI only ever pairs branches within the **same account**. It will never match your fork's branch to a same-named branch on a different account (including Postgres-Extensions). When there is no paired branch, the *other* repo is always taken from **`Postgres-Extensions/master`** — never a fork's `master` — so a stale or modified fork `master` can't influence the run. `master` is the only ref ever taken cross-account.
+
 ### What to do when pgxntool CI fails with "No paired test PR found"
 
-This failure means CI couldn't find an open PR in pgxntool-test with a matching branch name. The fix is almost always:
+This failure means CI couldn't find an open pgxntool-test PR **from your account** with a matching branch name. The fix is almost always:
 
-1. **Open a PR in pgxntool-test** from a branch with the **same name** as your pgxntool branch.
+1. **Open a PR in pgxntool-test** from a branch with the **same name, on the same account (your fork)** as your pgxntool branch.
 2. Re-run the failing CI check on your pgxntool PR (or push a new commit to trigger it).
 
-**Branch names must match exactly.** If your pgxntool branch is `fix/parse-bug`, your pgxntool-test branch must also be `fix/parse-bug`.
+**The branch name and account must match exactly.** If your pgxntool branch is `fix/parse-bug` on `your-account`, your pgxntool-test branch must also be `fix/parse-bug` on `your-account`.
 
 ### The `commit-with-no-tests` label
 
@@ -143,7 +145,7 @@ To request the label:
 ### Branch protection
 
 The `check-test-pr` status check on pgxntool is a required check for merging to `master`. It only passes when either:
-- A corresponding pgxntool-test PR exists (with a matching branch name) and its tests are **passing**, or
+- A corresponding pgxntool-test PR exists (matching branch name **and** account) and its tests are **passing**, or
 - A maintainer has applied the `commit-with-no-tests` label.
 
 This ensures pgxntool changes cannot be merged without passing test coverage.
