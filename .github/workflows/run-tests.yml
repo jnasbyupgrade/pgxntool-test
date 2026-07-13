@@ -14,6 +14,16 @@ on:
         description: 'The pgxntool branch to check out and use as the local branch name'
         type: string
         required: true
+      pgxntool-owner:
+        description: 'GitHub account that owns the pgxntool repo to check out. Defaults to this repo owner. Set to the PR head account so a fork PR pulls its paired branch from the same fork.'
+        type: string
+        required: false
+        default: ''
+      pgxntool-test-owner:
+        description: 'GitHub account that owns the pgxntool-test repo to check out. Defaults to this repo owner.'
+        type: string
+        required: false
+        default: ''
 
 jobs:
   test:
@@ -45,7 +55,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           persist-credentials: false
-          repository: ${{ github.repository_owner }}/pgxntool-test
+          repository: ${{ inputs.pgxntool-test-owner || github.repository_owner }}/pgxntool-test
           ref: ${{ inputs.pgxntool-test-ref }}
           path: pgxntool-test
           # REQUIRED: pgxntool-test includes BATS as a git submodule at
@@ -59,7 +69,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           persist-credentials: false
-          repository: ${{ github.repository_owner }}/pgxntool
+          repository: ${{ inputs.pgxntool-owner || github.repository_owner }}/pgxntool
           ref: ${{ inputs.pgxntool-branch }}
           path: pgxntool
           submodules: false  # pgxntool has no submodules

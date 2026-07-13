@@ -8,6 +8,32 @@
   for all test steps (PostgreSQL matrix, checkouts, git config, pgtap install, etc.).
   Called by both `ci.yml` here and by `pgxntool/ci.yml` for the commit-with-no-tests path.
 
+## Branch pairing and account matching
+
+A change to either repo should normally ship with a **matching branch (same
+name) on the same account** in the other repo. CI resolves the sibling using
+both the branch name **and** the PR head's account:
+
+- **pgxntool PRs** must have a paired pgxntool-test PR (matched by branch name +
+  head account) — enforced by `ci.yml`'s `check-test-pr`. The only escape is the
+  `commit-with-no-tests` label, which a maintainer applies (guarded by
+  `protect-label.yml`); then pgxntool is tested against pgxntool-test master.
+- **pgxntool-test PRs** may stand alone (test-only changes are a normal pattern).
+  `resolve` looks for a paired pgxntool branch on the PR head's account; if none
+  exists, it falls back to pgxntool master.
+
+### Never cross-account (security)
+
+The sibling branch is matched **only on the PR head's own account**. We never
+use a same-named branch from any other account — including Postgres-Extensions —
+to pair with a fork's branch. The **sole** cross-account exception is `master`:
+when there's no paired branch, the other repo is taken from
+**`Postgres-Extensions/master` only**, never the fork's master (which may be
+stale or deliberately modified). This is why `run-tests.yml` takes explicit
+`pgxntool-owner` / `pgxntool-test-owner` inputs: the caller resolves the correct
+account for each repo (head account for the paired side, `Postgres-Extensions`
+for a master fallback) rather than assuming everything lives under one owner.
+
 ## Cross-repo reusable workflow — tradeoffs and constraints
 
 `run-tests.yml` is referenced from **pgxntool** as:
