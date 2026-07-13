@@ -101,11 +101,11 @@ Each test file automatically runs its prerequisites if needed, so they can be ru
 
 `pgxntool` is the framework itself; `pgxntool-test` is the test harness for it. They are kept separate because `pgxntool` is embedded into extension projects via `git subtree` — you don't want test infrastructure polluting those projects. The CI is designed to coordinate changes across both repos.
 
-A pgxntool change **should almost always have a corresponding test change** in pgxntool-test. Commits touching only pgxntool (with no test changes) should be rare. It is also normal and common to have commits that only touch pgxntool-test (e.g., improving test coverage) with no corresponding pgxntool change — as long as tests pass, that's fine.
+**The norm is that a change is paired across both repos** — it comes with a matching branch (same name, same account) in the other repo. This is effectively required for `pgxntool` changes: a pgxntool change should almost always have a corresponding pgxntool-test change, and CI blocks an unpaired pgxntool PR unless a maintainer applies the `commit-with-no-tests` label (see below). A pgxntool-test-only change (with no pgxntool counterpart) is the occasional exception — for example, improving test coverage or infrastructure — and CI runs it against `pgxntool` master. Neither repo should be changed in isolation as a matter of routine.
 
 ### PR conventions
 
-When your change requires modifications to both repos, open PRs in **both repos from a branch with the same name, on the same GitHub account** (your fork). For example, if your feature branch is named `feature/add-pgtle-support`, push it to both your `pgxntool` and `pgxntool-test` forks and open a PR from each. **The branch name *and* the account must match** — CI pairs the two PRs using both.
+A change normally touches both repos, so open a PR in **each repo from a branch with the same name, on the same GitHub account** (your fork). For example, if your feature branch is named `feature/add-pgtle-support`, push it to both your `pgxntool` and `pgxntool-test` forks and open a PR from each. **The branch name *and* the account must match** — CI pairs the two PRs using both. (The exception is a pgxntool-test-only change, which needs no pgxntool PR; see above.)
 
 ### How CI works
 
