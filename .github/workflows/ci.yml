@@ -33,6 +33,10 @@ jobs:
           # The account this PR's branch lives on: the contributor's fork for
           # fork PRs, or Postgres-Extensions for a maintainer branch.
           HEAD_OWNER: ${{ github.event.pull_request.head.repo.owner.login }}
+          # This PR's own pgxntool-test is checked out from the base repo at the
+          # merge SHA — used only to print an accurate BRANCHES line below.
+          TEST_OWNER: ${{ github.repository_owner }}
+          TEST_SHA: ${{ github.sha }}
         run: |
           # Reject anything that isn't a valid git branch name before using it.
           git check-ref-format --branch "$BRANCH" >/dev/null 2>&1 || {
@@ -58,11 +62,12 @@ jobs:
                "refs/heads/${BRANCH}" > /dev/null 2>&1; then
             echo "ref=${BRANCH}" >> "$GITHUB_OUTPUT"
             echo "owner=${HEAD_OWNER}" >> "$GITHUB_OUTPUT"
-            echo "=== BRANCHES: pgxntool-test=${HEAD_OWNER}/${BRANCH} pgxntool=${HEAD_OWNER}/${BRANCH} ==="
+            # Same shape/order as run-tests.yml: pgxntool first, owner/ref for each.
+            echo "=== BRANCHES: pgxntool=${HEAD_OWNER}/${BRANCH} pgxntool-test=${TEST_OWNER}/${TEST_SHA} ==="
           else
             echo "ref=master" >> "$GITHUB_OUTPUT"
             echo "owner=Postgres-Extensions" >> "$GITHUB_OUTPUT"
-            echo "=== BRANCHES: pgxntool-test=${HEAD_OWNER}/${BRANCH} pgxntool=Postgres-Extensions/master (no paired pgxntool branch on ${HEAD_OWNER}) ==="
+            echo "=== BRANCHES: pgxntool=Postgres-Extensions/master pgxntool-test=${TEST_OWNER}/${TEST_SHA} (no paired pgxntool branch on ${HEAD_OWNER}) ==="
           fi
 
   test:
