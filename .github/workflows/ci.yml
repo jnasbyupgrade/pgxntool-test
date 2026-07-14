@@ -21,15 +21,22 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       pgxntool-ref: ${{ steps.pgxntool-ref.outputs.ref }}
+      pgxntool-owner: ${{ steps.pgxntool-ref.outputs.owner }}
 
     steps:
       - name: Resolve pgxntool branch
         id: pgxntool-ref
-        # PR-controlled values (head_ref) are passed via env, never interpolated
-        # directly into the script, to avoid shell injection.
+        # PR-controlled values (head_ref, head owner) are passed via env, never
+        # interpolated directly into the script, to avoid shell injection.
         env:
           BRANCH: ${{ github.head_ref }}
-          REPO_OWNER: ${{ github.repository_owner }}
+          # The account this PR's branch lives on: the contributor's fork for
+          # fork PRs, or Postgres-Extensions for a maintainer branch.
+          HEAD_OWNER: ${{ github.event.pull_request.head.repo.owner.login }}
+          # This PR's own pgxntool-test is checked out from the base repo at the
+          # merge SHA — used only to print an accurate BRANCHES line below.
+          TEST_OWNER: ${{ github.repository_owner }}
+          TEST_SHA: ${{ github.sha }}
         run: |
           # Reject anything that isn't a valid git branch name before using it.
           git check-ref-format --branch "$BRANCH" >/dev/null 2>&1 || {
@@ -37,20 +44,30 @@ jobs:
             exit 1
           }
 
-          # Check whether pgxntool has a branch with the same name as this PR.
-          # If it does, use it — changes in this test PR may depend on changes
-          # in a paired pgxntool branch. If not, fall back to master.
+          # Look for a paired pgxntool branch of the SAME name on the SAME
+          # account (HEAD_OWNER). A pgxntool change should ship with a matching
+          # pgxntool-test branch and vice versa; if this test PR has one, use it.
+          #
+          # SECURITY — never cross-account: we only ever match a branch on
+          # HEAD_OWNER. If there's no paired branch (e.g. a pgxntool-test-only
+          # PR), we fall back to pgxntool master from Postgres-Extensions ONLY,
+          # never the fork's master (which may be stale or modified) and never a
+          # same-named branch on any other account. master is the sole ref we
+          # take cross-account.
           #
           # --exit-code makes git ls-remote return non-zero when the ref is
           # absent, so we can branch on the result cleanly without parsing output.
           if git ls-remote --exit-code --heads \
-               "https://github.com/${REPO_OWNER}/pgxntool.git" \
+               "https://github.com/${HEAD_OWNER}/pgxntool.git" \
                "refs/heads/${BRANCH}" > /dev/null 2>&1; then
             echo "ref=${BRANCH}" >> "$GITHUB_OUTPUT"
-            echo "=== BRANCHES: pgxntool-test=${BRANCH} pgxntool=${BRANCH} ==="
+            echo "owner=${HEAD_OWNER}" >> "$GITHUB_OUTPUT"
+            # Same shape/order as run-tests.yml: pgxntool first, owner/ref for each.
+            echo "=== BRANCHES: pgxntool=${HEAD_OWNER}/${BRANCH} pgxntool-test=${TEST_OWNER}/${TEST_SHA} ==="
           else
             echo "ref=master" >> "$GITHUB_OUTPUT"
-            echo "=== BRANCHES: pgxntool-test=${BRANCH} pgxntool=master (branch not found in pgxntool) ==="
+            echo "owner=Postgres-Extensions" >> "$GITHUB_OUTPUT"
+            echo "=== BRANCHES: pgxntool=Postgres-Extensions/master pgxntool-test=${TEST_OWNER}/${TEST_SHA} (no paired pgxntool branch on ${HEAD_OWNER}) ==="
           fi
 
   test:
@@ -60,5 +77,11 @@ jobs:
     # the cross-repo reusable workflow tradeoffs and merge order constraints.
     uses: ./.github/workflows/run-tests.yml
     with:
+      # pgxntool: the paired branch on this PR's account, or Postgres-Extensions
+      # master when there's no pairing (resolved above).
+      pgxntool-owner: ${{ needs.resolve.outputs.pgxntool-owner }}
       pgxntool-branch: ${{ needs.resolve.outputs.pgxntool-ref }}
+      # pgxntool-test: this PR's own merged code, which lives on the base repo
+      # (github.repository_owner) at the merge SHA.
+      pgxntool-test-owner: ${{ github.repository_owner }}
       pgxntool-test-ref: ${{ github.sha }}
