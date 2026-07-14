@@ -5,10 +5,10 @@
 # Validates that verify-results correctly blocks make results when tests are
 # failing, detects pgtap failures, and can be disabled.
 #
-# Separate from make-results.bats because verify-results is pure file-checking
-# logic that doesn't require PostgreSQL. Keeping it in its own suite means these
-# tests always run, even when PostgreSQL is unavailable (make-results.bats skips
-# entirely in that case).
+# NOTE: pgxntool makes verify-results depend on test (verify-results: test), so
+# `make verify-results` re-runs the suite and therefore requires PostgreSQL. The
+# pgtap-detection cases below plant files in test/results/ (which survive the
+# fresh test run) rather than a regression.diffs (which the fresh run overwrites).
 
 load ../lib/helpers
 
@@ -29,37 +29,37 @@ setup() {
   assert_success
 }
 
-@test "verify-results has no dependencies on test execution" {
+@test "verify-results depends on test execution" {
+  # pgxntool makes verify-results depend on test (verify-results: test) so that
+  # `make results` re-runs the tests and checks the FRESH regression.diffs, even
+  # under make -j. Confirm the dependency is wired: a dry-run of verify-results
+  # must include the installcheck recipe pulled in via the test target.
   run make -n verify-results 2>&1
   assert_success
-  assert_not_contains "$output" "installcheck"
+  assert_contains "$output" "installcheck"
 }
 
-@test "regression.diffs blocks verify-results" {
-  # This test only verifies the verify-results target directly. The broader behavior
-  # of make results being blocked after a failing test run is tested in
-  # make-results.bats (which requires PostgreSQL) because the fix for the ordering
-  # bug means make results now runs make test first, requiring a live database.
-  cat > test/regression.diffs <<'EOF'
-*** test/expected/test.out
---- test/results/test.out
-***************
-*** 1 ****
-! expected
---- 1 ----
-! actual
-EOF
+@test "verify-results blocks when a test actually fails" {
+  # verify-results depends on test, so `make verify-results` re-runs the suite.
+  # A planted regression.diffs would just be overwritten by that fresh run, so
+  # force a REAL failure by corrupting an expected file, then confirm
+  # verify-results refuses to let make results proceed.
+  echo >> test/expected/base.out
 
   run make verify-results
   assert_failure
   assert_contains "$output" "Tests are failing"
   assert_contains "$output" "Cannot run 'make results'"
 
-  # State left for next test (regression.diffs still present)
+  # Restore clean state for the tests that follow.
+  run git checkout -- test/expected/base.out
+  assert_success
+  rm -f test/regression.diffs
 }
 
 @test "verify-results can be disabled" {
-  # regression.diffs still present from previous test
+  # With verify-results disabled, results depends only on test, so its dry-run
+  # never mentions the verify-results block message.
   run make -n results PGXNTOOL_ENABLE_VERIFY_RESULTS=no 2>&1
   assert_success
   # Check that verify-results recipe commands are not in the dry-run output.
