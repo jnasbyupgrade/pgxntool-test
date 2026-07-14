@@ -1,0 +1,37 @@
+name: Test GitHub Token OIDC Bypass
+
+# EMPIRICAL TEST: Confirm whether providing github_token: ${{ secrets.GITHUB_TOKEN }}
+# makes claude-code-action SKIP the OIDC->app-token exchange.
+#
+# Uses workflow_dispatch (manual trigger) so we can run it and read logs directly.
+# Runs in the fork context with access to CLAUDE_CODE_OAUTH_TOKEN secret.
+#
+# CAVEAT: Event type differs from real pull_request_target, so the test
+# proves the OIDC-bypass mechanism works with this token combo, but doesn't
+# re-test whether the actor-write-access validation is the root cause
+# (that's documented in upstream issues #1017/#270/#701).
+
+on:
+  workflow_dispatch
+
+jobs:
+  test-both-tokens:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Run Claude with BOTH claude_code_oauth_token + github_token (testing OIDC bypass)
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prompt: "Briefly list the main files in the root of this repository (max 2 turns)."
+          claude_args: "--max-turns 2"
