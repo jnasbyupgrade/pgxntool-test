@@ -228,6 +228,33 @@ teardown_file() {
   rm -f empty.control
 }
 
+@test "pgtle: parse_control_file handles whitespace before trailing comment" {
+  # Multiple spaces and a tab before a comment would leave stray whitespace after
+  # comment removal if only a single space was stripped (issue #26 follow-up to #25).
+  # Verify parse_control_file correctly strips all trailing whitespace so pgtle.sh
+  # finds the versioned SQL file and succeeds.
+
+  # Multiple spaces before comment
+  printf "default_version = '7.7.7'   # multiple spaces\n" > wspace_test.control
+  echo "SELECT 1;" > sql/wspace_test--7.7.7.sql
+
+  run "$TEST_REPO/pgxntool/pgtle.sh" --extension wspace_test --pgtle-version 1.5.0+
+  assert_success
+  assert_file_exists "pg_tle/1.5.0+/wspace_test.sql"
+
+  # Tab before comment
+  printf "default_version = '6.6.6'\t# tab before comment\n" > tab_test.control
+  echo "SELECT 1;" > sql/tab_test--6.6.6.sql
+
+  run "$TEST_REPO/pgxntool/pgtle.sh" --extension tab_test --pgtle-version 1.5.0+
+  assert_success
+  assert_file_exists "pg_tle/1.5.0+/tab_test.sql"
+
+  # Cleanup
+  rm -f wspace_test.control sql/wspace_test--7.7.7.sql pg_tle/1.5.0+/wspace_test.sql
+  rm -f tab_test.control sql/tab_test--6.6.6.sql pg_tle/1.5.0+/tab_test.sql
+}
+
 @test "pgtle: warning on module_pathname in control" {
   # Create a C extension control file
   echo "comment = 'C extension'" > cext.control
