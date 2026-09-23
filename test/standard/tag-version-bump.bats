@@ -16,8 +16,7 @@
 # - bump-default-version.sh's own decision logic (parsing/rewriting
 #   default_version, argument validation, error cases) is tested directly
 #   against scratch control files -- no make, no foundation, no PostgreSQL.
-# - post-tag-version-bump's own wiring (does it pass the right script/args,
-#   does PGXNTOOL_ENABLE_POST_TAG_VERSION_BUMP=no genuinely make it a no-op)
+# - post-tag-version-bump's own wiring (does it pass the right script/args)
 #   is proven via make -n dry-runs and a stub script substituted through
 #   _POST_TAG_VERSION_BUMP_SCRIPT -- not by depending on the real script's
 #   behavior.
@@ -122,49 +121,30 @@ setup_foundation_repo() {
   assert_git_clean
 }
 
-@test "make -n post-tag-version-bump: invocation is shown, disabled as a no-op, or re-valued based on the override variables" {
+@test "make -n post-tag-version-bump: invocation is shown, re-valued based on the override variable" {
   setup_foundation_repo
 
-  # Default: enabled, placeholder "stable"
+  # Default: placeholder "stable"
   run make -n post-tag-version-bump
   assert_success
   assert_contains "$output" "bump-default-version.sh stable pgxntool-test.control"
-
-  # Disabled: the whole target is replaced by a no-op echo (ifeq-gated at
-  # parse time in base.mk, like check-stale-expected's ENABLE flag)
-  run make -n post-tag-version-bump PGXNTOOL_ENABLE_POST_TAG_VERSION_BUMP=no
-  assert_success
-  assert_not_contains "$output" "bump-default-version.sh"
-  assert_contains "$output" "disabled, doing nothing"
 
   # Custom placeholder value is substituted through
   run make -n post-tag-version-bump PGXNTOOL_POST_TAG_VERSION=dev-next
   assert_success
   assert_contains "$output" "bump-default-version.sh dev-next pgxntool-test.control"
-
-  # Invalid enable value is a hard, immediate make error (pgxntool_validate_yesno)
-  run make -n post-tag-version-bump PGXNTOOL_ENABLE_POST_TAG_VERSION_BUMP=maybe
-  assert_failure
-  assert_contains "$output" "PGXNTOOL_ENABLE_POST_TAG_VERSION_BUMP must be"
 }
 
 # ============================================================================
 # `post-tag-version-bump`: real execution, stub script (proves invocation, not behavior)
 # ============================================================================
 
-@test "make post-tag-version-bump: stub is invoked when enabled, never invoked when disabled" {
+@test "make post-tag-version-bump: stub is invoked" {
   setup_foundation_repo
 
   local marker="$BATS_TEST_TMPDIR/invoked"
   local stub=$(make_stub_script post-tag-stub 0 "" "$marker")
 
-  # Disabled: must not run the stub, and must not touch the control file
-  run make post-tag-version-bump PGXNTOOL_ENABLE_POST_TAG_VERSION_BUMP=no _POST_TAG_VERSION_BUMP_SCRIPT="$stub"
-  assert_success
-  assert_file_not_exists "$marker"
-  assert_git_clean
-
-  # Enabled: stub must run
   run make post-tag-version-bump _POST_TAG_VERSION_BUMP_SCRIPT="$stub"
   assert_success
   assert_file_exists "$marker"
