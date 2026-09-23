@@ -65,6 +65,14 @@ let them decide when to commit.
 
 Because of that, whether a paired PR's cross-reference actually made it onto master can only be verified *after the fact*, once both sides are already merged — see `crossref-audit` below.
 
+### Merge Order for Paired PRs
+
+**When a pgxntool-test PR's new/changed tests exercise pgxntool behavior that isn't on pgxntool's master yet, merge the pgxntool PR first.** Once a pgxntool-test PR has no paired pgxntool branch (matched by branch name **and** account — see README.md's CI section), its CI runs against pgxntool master directly. Merging the test side first means every *other*, unrelated pgxntool-test PR in that window fails CI against a script/target/behavior that doesn't exist yet, with no obvious link back to the missing pgxntool PR.
+
+If a pgxntool-test PR's tests only cover behavior already on pgxntool's master, order doesn't matter.
+
+**Evidence**: pgxntool-test PR #79 (tests for `check-test-install-error-stop.sh`, `build-results`, and `test-build` ordering) merged 2026-09-08, eight days before its paired pgxntool PR #109 — which actually added `test/bin/check-test-install-error-stop.sh` and the `test-build`/`installcheck` gating those tests exercise — merged 2026-09-16. In that window, unrelated pgxntool-test PRs with no paired pgxntool branch (e.g. #84, #85) failed CI with `check-test-install-error-stop.sh: No such file or directory`, since the script wasn't on pgxntool master yet.
+
 ### End of Each Round: Check for Missing Cross-References
 
 **At the end of each round of work in pgxntool or pgxntool-test (not just once at session start — sessions here run long), and before rebasing any branch onto a fresh master fetch**, run the `crossref-audit` skill's script: `bash .claude/skills/crossref-audit/scripts/audit.sh <pgxntool-dir> <pgxntool-test-dir>`. It fetches both masters, caches the last-checked SHAs, and exits immediately with a one-line "nothing new" if neither has moved since the last clean check — so repeating it every round costs near-zero tokens in the common case. Only read further into the skill's rules if it reports something flagged; follow those rules exactly, especially around when it is and isn't safe to amend an already-merged commit.
