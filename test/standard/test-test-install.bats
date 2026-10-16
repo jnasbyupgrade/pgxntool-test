@@ -112,6 +112,7 @@ setup() {
   run make test TESTOUT="$out"
   assert_success
   assert_file_exists "$out/results/verify_install_marker.out"
+  assert_file_exists "$out/build/results/build_check.out"
 
   assert_repo_clean "after make test"
 }
